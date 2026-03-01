@@ -1,0 +1,394 @@
+{
+  "name": "client onboarding",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Current status",
+        "formDescription": "Fill the form ",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Name",
+              "placeholder": "Your Name",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Email",
+              "placeholder": "Your Email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Company industry",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "what are you trying to achieve?"
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [
+        -176,
+        176
+      ],
+      "id": "13feb27d-826d-44f8-88d9-8d45df97aefe",
+      "name": "On form submission",
+      "webhookId": "9c7c8e49-567a-4d9e-890b-63e5b01d3849"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.submittedAt }}",
+        "options": {
+          "systemMessage": "=Can you please create a warm welcome email for a new client based on their information?\nWe want the email to be concise and friendly but also professional.\nIt should be personalized to them based on their industry and what they're hoping to get out of our partnership.\nHere is the information about the client:\n\nName: {{ $json.Name }}\n\nEmail: {{ $json.Email }}\n\nIndustry: {{ $json['Company industry'] }}\n\nWhat they're hoping to achieve: {{ $json['what are you trying to achieve?'] }}\n\nMake sure to always sign off the email from Bob Bob (replace with your real name, company, and position).\nDo not leave any placeholder variables for the sign off if information is unknown; never put your name or contact information as a variable.\n\nOutput format:\n\nSubject: [Email subject]\n\nBody: [Email body]\n\nEmail: {{ $json.Email }}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "149d43c2-9922-429a-abc7-cd7aae661f55",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        208,
+        192
+      ],
+      "id": "c1c00879-9dd4-453b-903b-162ea4aeb7f5",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "1YDcRZnHKU9BV3gM",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=parse the JSON query and output the parameters seperately\n\nSubject \nBody\nEmail",
+              "role": "system"
+            },
+            {
+              "content": "={{ $json.output }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        560,
+        0
+      ],
+      "id": "75bb6467-7b99-42f3-9d6c-5b855408901a",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "1YDcRZnHKU9BV3gM",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('On form submission').item.json.Email }}",
+        "subject": "={{ $json.message.content.Subject }}",
+        "message": "={{ $json.message.content.Body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        912,
+        0
+      ],
+      "id": "2e36307b-0802-4215-916b-4c7b57af6c13",
+      "name": "Send a message",
+      "webhookId": "d59e29c9-3642-4ff9-abd0-a4a0e3402229",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "HEcPznwHNKskjTLo",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        160,
+        560
+      ],
+      "id": "d1e32a42-cf69-4756-9640-bcbb2b2c338a",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "1YDcRZnHKU9BV3gM",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Take the client information provided and create a summary of their client profile.\nHere is the client's information:\n\nName: {{ $json.Name }}\n\nEmail: {{ $json.Email }}\n\nCompany Industry: {{ $json['Company industry'] }}\n\nWhat they're hoping to achieve: {{ $json['what are you trying to achieve?'] }}\n\nOutput the following parameters:\n\nname:{{ $json.Name }}\n\nemail:{{ $json.Email }}\n\nsummary (a brief summary of the client based on their information)",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        160,
+        352
+      ],
+      "id": "cfc02c41-e70e-41d4-b10b-19ecf9188571",
+      "name": "AI Agent2"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "parse the JSON query and output the parameters separately\n\nName\nEmail\nSummary",
+              "role": "system"
+            },
+            {
+              "content": "={{ $json.output }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        512,
+        352
+      ],
+      "id": "390f56ca-5de8-4255-b4ec-36cee943adad",
+      "name": "Message a model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "1YDcRZnHKU9BV3gM",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1s6J8yz6rTDeM2v5KYUmyHq8MDbFiAsud3Q0t8jn_44U",
+          "mode": "list",
+          "cachedResultName": "client",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1s6J8yz6rTDeM2v5KYUmyHq8MDbFiAsud3Q0t8jn_44U/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1s6J8yz6rTDeM2v5KYUmyHq8MDbFiAsud3Q0t8jn_44U/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $json.message.content.Name }}",
+            "Email": "={{ $json.message.content.Email }}",
+            "Summary": "={{ $json.message.content.Summary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Summary",
+              "displayName": "Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        864,
+        352
+      ],
+      "id": "41e2e648-89cb-4880-ad76-fc32b5b1ee81",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "LdFPt3nZ4TLQPV1f",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Agent2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent2": {
+      "main": [
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d4f2c245-e0ec-4260-9fe2-e3121ae77941",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2238425e2bd3c8c5c8de16f53fbb84f9854d742160f04356aab6f49bf67caafd"
+  },
+  "id": "GhOpcDQHQDKIiTx0",
+  "tags": []
+}

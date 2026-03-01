@@ -1,0 +1,435 @@
+{
+  "name": "LinkedIn Data Analyst Jobs Daily",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "3ccaa25b-7444-4467-bbc3-0b32ba949334",
+      "name": "Daily Trigger at 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1312,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search",
+        "options": {}
+      },
+      "id": "de6e3eb5-7b71-4c80-8434-301bc1cc76ea",
+      "name": "Fetch LinkedIn Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1088,
+        208
+      ],
+      "continueOnFail": true,
+      "notes": "Fetches Data Analyst jobs from LinkedIn from past 6 days"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "73cd587e-a5d8-49f1-8970-79f30aa22f46",
+              "leftValue": "={{$json[\"data\"].length}}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "04e6a830-2fd7-4088-8e33-bae0713cef3d",
+      "name": "Check If Jobs Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -864,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = [];\n\nfor (const item of $input.all()) {\n  const html = item.json.data;\n\n  // Split HTML into job listing blocks\n  const jobBlocks = html.split('<li').slice(1);\n\n  for (const block of jobBlocks) {\n    // Extract job URL\n    const jobUrlMatch = block.match(/href=\"([^\"]*linkedin\\.com\\/jobs\\/view[^\"]*)\"/);\n    const jobUrl = jobUrlMatch ? jobUrlMatch[1].trim() : '';\n\n    // Extract company name (handles nested <a> tags)\n    const companyMatch = block.match(/class=\"base-search-card__subtitle[^>]*>(.*?)<\\/h4>/s);\n    let companyName = '';\n    if (companyMatch) {\n      const linkMatch = companyMatch[1].match(/<a[^>]*>(.*?)<\\/a>/);\n      companyName = linkMatch ? linkMatch[1].trim() : companyMatch[1].replace(/<[^>]*>/g, '').trim();\n    }\n\n    // ✅ Extract location (handles both <div> and <span>)\n    const locationMatch = block.match(/class=\"job-search-card__location[^>]*>(.*?)<\\/(?:div|span)>/);\n    const location = locationMatch ? locationMatch[1].trim() : '';\n\n    // Extract date posted\n    const dateMatch = block.match(/<time[^>]*datetime=\"([^\"]*)\"/);\n    const datePosted = dateMatch ? dateMatch[1].trim() : '';\n\n    // Push result if at least job URL exists\n    if (jobUrl) {\n      output.push({\n        json: {\n          job_url: jobUrl,\n          company_name: companyName,\n          location: location,\n          date_posted: datePosted\n        }\n      });\n    }\n  }\n}\n\nreturn output;\n"
+      },
+      "id": "1b735a3d-7084-4e5f-aa37-5349c904e8db",
+      "name": "Parse Job Listings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        112
+      ],
+      "notes": "Extracts job data from LinkedIn HTML response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "15c70065-46af-4585-b17a-73a2369291b0",
+              "leftValue": "={{$json[\"output\"]}}",
+              "rightValue": "RELEVANT",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6b07244e-8117-4ff9-bc45-9e4814508fee",
+      "name": "Filter Relevant Jobs",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -64,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1F17v4eDpgT9GTZgTLTA23a5gqeWXM7cajNszbFWvHkM",
+          "mode": "list",
+          "cachedResultName": "jobs ",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1F17v4eDpgT9GTZgTLTA23a5gqeWXM7cajNszbFWvHkM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1F17v4eDpgT9GTZgTLTA23a5gqeWXM7cajNszbFWvHkM/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Company Name": "={{ $('Parse Job Listings').item.json.company_name }}",
+            "Job URL": "={{ $('Parse Job Listings').item.json.job_url }}",
+            "Post date": "={{ $('Parse Job Listings').item.json.date_posted }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Company Name",
+              "displayName": "Company Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Job URL",
+              "displayName": "Job URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Post date",
+              "displayName": "Post date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "bf5d3d4e-c6f8-4f7d-a7f4-dca3e7d5c038",
+      "name": "Add to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        160,
+        16
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "0hRXCLW59qIbUDtP",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C09P3L1S40M",
+          "mode": "list",
+          "cachedResultName": "new-channel"
+        },
+        "text": "we done our job go and find your job applications",
+        "otherOptions": {}
+      },
+      "id": "2c436a67-9df1-443e-82c7-c4db03403c27",
+      "name": "Notify Success",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        384,
+        16
+      ],
+      "webhookId": "46a49df5-9742-4cf6-8243-493f77746662",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "FmlC29TrG1YyQmlL",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C09P3L1S40M",
+          "mode": "list",
+          "cachedResultName": "new-channel"
+        },
+        "text": "we received an error",
+        "otherOptions": {}
+      },
+      "id": "b045c6f9-6dd4-46e5-a056-7d59dcc7884c",
+      "name": "Notify Fetch Error",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        -640,
+        304
+      ],
+      "webhookId": "97b5d7ab-4608-424e-81cc-03bcf5e2bbd0",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "FmlC29TrG1YyQmlL",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C09P3L1S40M",
+          "mode": "list",
+          "cachedResultName": "new-channel"
+        },
+        "text": "we don't see any jobs",
+        "otherOptions": {}
+      },
+      "id": "652ab7ec-0db5-4974-8949-33ccd30e0f50",
+      "name": "Notify No Jobs",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        160,
+        208
+      ],
+      "webhookId": "06c78724-d3e5-4746-b314-0894b28fb840",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "FmlC29TrG1YyQmlL",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze this job listing:\n\nJob Title: Data Analyst\nCompany: {{ $json.company_name }}\nurl: {{ $json.job_url }}\ndate_posted: {{ $json.date_posted }}\n\nBased on the information above, determine if this is a relevant Data Analyst position.",
+        "options": {
+          "systemMessage": "You are an expert job relevance analyzer specializing in Data Analytics roles.\n\n## Your Task\nAnalyze the provided job listing and determine if it's a relevant opportunity for a Data Analyst job seeker.\n\n## Relevant Job Titles Include\n- Data Analyst\n- Junior Data Analyst\n- Senior Data Analyst\n- Lead Data Analyst\n- Business Analyst (if analytics-focused)\n- Data Scientist\n- Junior Data Scientist\n- Analytics Engineer\n- BI Developer / Business Intelligence Analyst\n- BI Analyst\n- Marketing Analyst (if data-focused)\n- Financial Analyst (if data-focused)\n- Product Analyst\n- Growth Analyst\n- Operations Analyst (if data-focused)\n- Quantitative Analyst\n\n## NOT Relevant Job Titles\n- Quality Assurance Analyst (QA testing)\n- Customer Support Analyst (customer service)\n- Sales Analyst (unless heavily data-focused with SQL/Python)\n- HR Analyst (unless workforce analytics with technical tools)\n- Policy Analyst (government/compliance)\n- Systems Analyst (IT infrastructure, not data)\n- Business Systems Analyst (IT implementation)\n- Process Analyst (operations improvement without data)\n- Risk Analyst (compliance-focused without analytics)\n\n## Required Skills to Look For\nIf the job description mentions these, it's likely relevant:\n\n### Technical Skills (High Relevance)\n- SQL (PostgreSQL, MySQL, SQL Server)\n- Python (pandas, numpy, scikit-learn)\n- R programming\n- Data visualization (Tableau, Power BI, Looker, Metabase)\n- Statistical analysis\n- Machine learning basics\n- Database management\n- ETL/ELT processes\n- Data modeling\n- A/B testing\n- APIs and data extraction\n\n### Business Skills (Medium Relevance)\n- Excel/Google Sheets (advanced: pivot tables, VLOOKUP)\n- Reporting and dashboards\n- KPI tracking\n- Business intelligence\n- Data storytelling\n- Stakeholder communication\n- Requirements gathering\n\n### Tools (Supporting Evidence)\n- Jupyter notebooks\n- Git/GitHub\n- dbt (data build tool)\n- Airflow, Prefect (data orchestration)\n- AWS, GCP, Azure (cloud platforms)\n- Snowflake, BigQuery, Redshift (data warehouses)\n\n## Decision Rules\n\n### Rule 1: Title-Based Quick Filter\n- If job title explicitly contains 'Data Analyst' or 'Data Scientist' → **LIKELY RELEVANT**\n- If job title contains 'Quality', 'Customer Support', 'Sales Operations' → **LIKELY NOT RELEVANT**\n\n### Rule 2: Skills-Based Analysis\n- If job mentions 3+ technical skills from the list above → **RELEVANT**\n- If job mentions only business skills without technical tools → **BORDERLINE**\n\n### Rule 3: Industry Context\n- Tech companies (Amazon, Google, Meta, startups) → More likely relevant\n- Consulting/finance with data focus → Likely relevant\n- Customer service/operations without tech stack → Less likely relevant\n\n### Rule 4: Seniority Level (Optional Filter)\n- If filtering for junior roles: 0-2 years experience → RELEVANT\n- If filtering for senior roles: 5+ years experience → NOT_RELEVANT\n- Adjust based on user preferences\n\n### Rule 5: When in Doubt\n- Err on the side of **RELEVANT** (false positives better than false negatives)\n- If job has any meaningful data component, mark as RELEVANT\n- Let the job seeker make final decision\n\n## Output Format\nYou MUST respond in this exact format:\n\n**RELEVANT** - [Brief 1-sentence reason including key skill or job aspect]\n\nOR\n\n**NOT_RELEVANT** - [Brief 1-sentence reason explaining why it's not a data role]\n\n### Good Output Examples\n\n✅ **RELEVANT** - Core data analyst position requiring SQL, Python, and Tableau for customer analytics\n\n✅ **RELEVANT** - Business analyst role on dedicated analytics team with ETL and dashboard requirements\n\n✅ **NOT_RELEVANT** - QA testing role focused on software quality assurance, not data analysis\n\n✅ **NOT_RELEVANT** - Sales operations analyst without technical data skills, primarily CRM management\n\n### Bad Output Examples\n\n❌ \"This job seems relevant because it involves data\"\n(Too vague, wrong format)\n\n❌ \"RELEVANT\"\n(Missing explanation)\n\n❌ \"I think this is a good opportunity for data analysts who want to work in finance...\"\n(Too wordy, wrong format)\n\n## Examples for Training\n\n### Example 1\n**Input**: \"Senior Data Analyst at Amazon, Seattle\"\n**Output**: **RELEVANT** - Core data analyst position at major tech company\n\n### Example 2\n**Input**: \"Quality Assurance Analyst at Microsoft, Redmond\"\n**Output**: **NOT_RELEVANT** - QA testing role focused on software quality, not data analysis\n\n### Example 3\n**Input**: \"Business Analyst - Analytics Team at Netflix\"\n**Output**: **RELEVANT** - Business analyst on dedicated analytics team likely doing data work\n\n### Example 4\n**Input**: \"Data Analyst (Customer Support) at Zendesk\"\n**Output**: **RELEVANT** - Data analyst role analyzing support metrics and user data\n\n### Example 5\n**Input**: \"Support Analyst at Salesforce\"\n**Output**: **NOT_RELEVANT** - Customer support role without technical data analysis component\n\n### Example 6\n**Input**: \"Marketing Analyst - Growth Team at Spotify\"\n**Output**: **RELEVANT** - Marketing analyst on growth team likely doing A/B testing and data analysis\n\n### Example 7\n**Input**: \"Systems Analyst at IBM\"\n**Output**: **NOT_RELEVANT** - IT systems role focused on infrastructure, not data analysis\n\n### Example 8\n**Input**: \"Junior Data Scientist - Machine Learning at OpenAI\"\n**Output**: **RELEVANT** - Entry-level data science role with ML focus\n\n### Example 9\n**Input**: \"Operations Analyst at Walmart\"\n**Output**: **BORDERLINE - Need more info** - Could be relevant if involves data analysis, or just process improvement\n\n### Example 10\n**Input**: \"Financial Analyst - Data & Reporting at Goldman Sachs\"\n**Output**: **RELEVANT** - Financial analyst with explicit data and reporting responsibilities\n\n## Analysis Approach\n\nWhen analyzing a job, follow this mental checklist:\n\n1. **Read the job title carefully**\n   - Does it explicitly say \"Data Analyst\" or similar?\n   - Any red flags like \"Quality\", \"Support\", \"Systems\"?\n\n2. **Scan for technical skills**\n   - Count how many technical tools are mentioned\n   - SQL, Python, Tableau = strong indicators\n\n3. **Consider the company/team**\n   - Is it a tech company or analytics-focused organization?\n   - Is it an analytics or data team?\n\n4. **Check the description context**\n   - What are the main responsibilities?\n   - Are they data analysis tasks or something else?\n\n5. **Make your decision**\n   - Apply the decision rules above\n   - When uncertain, choose RELEVANT\n\n## Edge Cases to Handle\n\n### Case 1: \"Analyst\" without \"Data\"\n- \"Business Analyst\" → Check for SQL/Python → If yes: RELEVANT\n- \"Operations Analyst\" → Check for analytics tools → If yes: RELEVANT\n- \"Support Analyst\" → Usually NOT_RELEVANT unless explicitly data-focused\n\n### Case 2: Job Description Not Available\n- If only title and company provided → Make best guess from title\n- Trust the title as primary signal\n\n### Case 3: Multiple Job Functions\n- \"Data Analyst / Data Engineer\" → RELEVANT (at least partially data analyst)\n- \"Business Analyst / Project Manager\" → BORDERLINE (depends on skills)\n\n### Case 4: International Roles\n- Consider cultural differences in job titles\n- \"Data Analyst\" is universal, but be flexible\n\n### Case 5: Intern/Junior Roles\n- Mark as RELEVANT if it's a data analyst internship\n- Good opportunity for entry-level seekers\n\nNow analyze the job provided."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -416,
+        112
+      ],
+      "id": "4bf490ee-c66b-4636-8796-d96c3bbfdba6",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "perplexity/sonar-pro",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -344,
+        336
+      ],
+      "id": "bf73ad4f-9559-42c7-b1e7-d49fc8699b6f",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "5W8nicS9bp4ZB6kQ",
+          "name": "OpenRouter account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Trigger at 9AM": {
+      "main": [
+        [
+          {
+            "node": "Fetch LinkedIn Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch LinkedIn Jobs": {
+      "main": [
+        [
+          {
+            "node": "Check If Jobs Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Jobs Found": {
+      "main": [
+        [
+          {
+            "node": "Parse Job Listings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Fetch Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Job Listings": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Relevant Jobs": {
+      "main": [
+        [
+          {
+            "node": "Add to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify No Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Notify Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Filter Relevant Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ced443f5-da70-4f5c-b33f-4561fede2fc5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5aed6b2bc9e7adf5bcb3ab78e1b103a65214a7ea2cacddc8010df86b2bde4524"
+  },
+  "id": "X1t8NfntyjyNPf48",
+  "tags": []
+}

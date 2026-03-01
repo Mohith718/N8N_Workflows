@@ -1,0 +1,1822 @@
+{
+  "name": "B2B Sales Automation - Lead Gen to Outreach",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "9fa5b1b2-9a0d-4038-bea9-dc754ad9556a",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        192,
+        256
+      ],
+      "notes": "Runs every Monday at 9 AM"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize workflow with target parameters\nconst inputData = $input.all();\n\n// Check if data comes from webhook or use defaults\nconst webhookData = inputData.find(item => item.json.body);\nconst hasWebhookInput = webhookData && Object.keys(webhookData.json.body).length > 0;\n\nconst config = {\n  keywords: hasWebhookInput ? \n    (webhookData.json.body.keywords || ['Fintech founders', 'SaaS startups']) :\n    ['Fintech founders', 'SaaS startups'],\n  industries: hasWebhookInput ?\n    (webhookData.json.body.industries || ['Technology', 'Software']) :\n    ['Technology', 'Software'],\n  location: hasWebhookInput ?\n    (webhookData.json.body.location || 'United States') :\n    'United States',\n  companySize: hasWebhookInput ?\n    (webhookData.json.body.companySize || '11-50') :\n    '11-50',\n  maxResults: hasWebhookInput ?\n    (webhookData.json.body.maxResults || 50) :\n    50,\n  executionId: $execution.id,\n  timestamp: new Date().toISOString()\n};\n\nreturn {\n  json: config\n};"
+      },
+      "id": "bd2040ad-4fa4-4c1d-a354-535cb23de3b7",
+      "name": "Initialize Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        256
+      ],
+      "notes": "Setup search parameters and workflow config"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apollo.io/v1/mixed_people/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "j6Aq7iMPv_7zDQIF-gHPrQ"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "q_keywords,person_locations,organization_num_employees_ranges,per_page,person_title",
+              "value": "={{ $json.keywords.join(' OR ') }}"
+            },
+            {
+              "name": "person_locations",
+              "value": "=[\"{{ $json.location }}\"]"
+            },
+            {
+              "name": "organization_num_employees_ranges",
+              "value": "=[\"{{ $json.companySize }}\"]"
+            },
+            {
+              "name": "per_page",
+              "value": "={{ $json.maxResults }}"
+            },
+            {
+              "name": "person_title",
+              "value": "=[\"Founder\",\"CEO\",\"Co-Founder\",\"Head of Growth\"]"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {}
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "101833aa-4159-4310-aa08-7538041f6848",
+      "name": "Apollo.io Lead Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        160
+      ],
+      "continueOnFail": true,
+      "notes": "Fetch leads from Apollo.io API"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://phantombuster.com/api/v2/agents/launch",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "phantombusterApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Phantombuster-Key",
+              "value": "={{ $credentials.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "={{ $json.phantombusterAgentId }}"
+            },
+            {
+              "name": "argument",
+              "value": "={{ JSON.stringify({ searches: $json.keywords, numberOfProfiles: $json.maxResults }) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f10caa44-386c-4354-9d61-e31a5e9f5aa0",
+      "name": "Phantombuster LinkedIn Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        352
+      ],
+      "credentials": {
+        "phantombusterApi": {
+          "id": "cSYGJCedk8ynbRq9",
+          "name": "Phantombuster account"
+        }
+      },
+      "continueOnFail": true,
+      "notes": "Alternative: Use Phantombuster for LinkedIn scraping"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge and normalize data from multiple sources\nconst items = $input.all();\nconst normalizedLeads = [];\nconst errors = [];\n\nfor (const item of items) {\n  try {\n    // Handle Apollo.io response\n    if (item.json.people) {\n      for (const person of item.json.people) {\n        normalizedLeads.push({\n          source: 'apollo',\n          firstName: person.first_name,\n          lastName: person.last_name,\n          fullName: `${person.first_name} ${person.last_name}`,\n          email: person.email,\n          title: person.title,\n          company: person.organization?.name,\n          companyDomain: person.organization?.primary_domain,\n          companyIndustry: person.organization?.industry,\n          companySize: person.organization?.estimated_num_employees,\n          linkedinUrl: person.linkedin_url,\n          location: person.city ? `${person.city}, ${person.state}` : person.state,\n          country: person.country,\n          rawData: JSON.stringify(person),\n          scrapedAt: new Date().toISOString(),\n          executionId: $execution.id\n        });\n      }\n    }\n    \n    // Handle Phantombuster response\n    if (item.json.container) {\n      const resultUrl = item.json.container.resultObject?.csvUrl;\n      if (resultUrl) {\n        // Note: You'd fetch and parse the CSV in a follow-up HTTP Request node\n        normalizedLeads.push({\n          source: 'phantombuster',\n          phantombusterResultUrl: resultUrl,\n          containerId: item.json.container.id,\n          status: 'pending_csv_fetch',\n          executionId: $execution.id\n        });\n      }\n    }\n    \n    // Handle direct CSV/structured data\n    if (Array.isArray(item.json) || item.json.results) {\n      const data = Array.isArray(item.json) ? item.json : item.json.results;\n      for (const record of data) {\n        normalizedLeads.push({\n          source: 'custom',\n          firstName: record.firstName || record.first_name,\n          lastName: record.lastName || record.last_name,\n          fullName: record.fullName || `${record.firstName} ${record.lastName}`,\n          email: record.email,\n          title: record.title || record.jobTitle,\n          company: record.company || record.companyName,\n          companyDomain: record.website || record.domain,\n          linkedinUrl: record.linkedIn || record.linkedin_url,\n          rawData: JSON.stringify(record),\n          scrapedAt: new Date().toISOString(),\n          executionId: $execution.id\n        });\n      }\n    }\n  } catch (error) {\n    errors.push({\n      error: error.message,\n      itemIndex: items.indexOf(item),\n      rawItem: JSON.stringify(item),\n      timestamp: new Date().toISOString()\n    });\n  }\n}\n\nreturn normalizedLeads.map(lead => ({ json: lead }));"
+      },
+      "id": "ad5dffd2-25ac-440a-a9e3-b20df4dc654d",
+      "name": "Normalize Lead Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        256
+      ],
+      "notes": "Clean and structure raw API responses"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deduplicate leads and validate data quality\nconst items = $input.all();\nconst seen = new Map();\nconst validLeads = [];\nconst invalidLeads = [];\n\n// Email validation regex\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n\nfor (const item of items) {\n  const lead = item.json;\n  \n  // Create unique key (email + company or linkedinUrl)\n  const uniqueKey = lead.email ? \n    `${lead.email.toLowerCase()}_${lead.company}` : \n    lead.linkedinUrl;\n  \n  // Skip if duplicate\n  if (seen.has(uniqueKey)) {\n    continue;\n  }\n  \n  // Validate required fields\n  const isValid = (\n    lead.fullName && lead.fullName.length > 2 &&\n    (lead.email ? emailRegex.test(lead.email) : lead.linkedinUrl) &&\n    lead.company && lead.company.length > 1\n  );\n  \n  if (isValid) {\n    seen.set(uniqueKey, true);\n    \n    // Add data quality score\n    let qualityScore = 0;\n    if (lead.email && emailRegex.test(lead.email)) qualityScore += 30;\n    if (lead.linkedinUrl) qualityScore += 20;\n    if (lead.title) qualityScore += 15;\n    if (lead.companyDomain) qualityScore += 15;\n    if (lead.companyIndustry) qualityScore += 10;\n    if (lead.location) qualityScore += 10;\n    \n    validLeads.push({\n      ...lead,\n      uniqueKey,\n      dataQualityScore: qualityScore,\n      validatedAt: new Date().toISOString()\n    });\n  } else {\n    invalidLeads.push({\n      ...lead,\n      validationError: 'Missing required fields or invalid email',\n      timestamp: new Date().toISOString()\n    });\n  }\n}\n\n// Store both valid and invalid for logging\nreturn [\n  ...validLeads.map(lead => ({ json: lead })),\n  ...invalidLeads.map(lead => ({ json: { ...lead, isInvalid: true } }))\n];"
+      },
+      "id": "814225ab-814a-4424-abb7-79cb4a5347f8",
+      "name": "Deduplicate & Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        256
+      ],
+      "notes": "Remove duplicates and validate data quality"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "valid-leads",
+              "leftValue": "={{ $json.isInvalid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c102d32c-80bb-42bb-af45-1bc624bc940a",
+      "name": "Split Valid/Invalid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        256
+      ],
+      "notes": "Route valid leads to storage, invalid to error log"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "leads_raw",
+          "mode": "list",
+          "cachedResultName": "leads_raw"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source": "={{ $json.source }}",
+            "first_name": "={{ $json.firstName }}",
+            "last_name": "={{ $json.lastName }}",
+            "full_name": "={{ $json.fullName }}",
+            "email": "={{ $json.email }}",
+            "title": "={{ $json.title }}",
+            "company": "={{ $json.company }}",
+            "company_domain": "={{ $json.companyDomain }}",
+            "company_industry": "={{ $json.companyIndustry }}",
+            "company_size": "={{ $json.companySize }}",
+            "linkedin_url": "={{ $json.linkedinUrl }}",
+            "location": "={{ $json.location }}",
+            "country": "={{ $json.country }}",
+            "data_quality_score": "={{ $json.dataQualityScore }}",
+            "raw_data": "={{ $json.rawData }}",
+            "scraped_at": "={{ $json.scrapedAt }}",
+            "execution_id": "={{ $json.executionId }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "skipOnConflict": true
+        }
+      },
+      "id": "24a767fd-7da4-42ec-a2fe-011b7ee45cf5",
+      "name": "Store in PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1536,
+        160
+      ],
+      "notes": "Insert validated leads into database"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "error_logs",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow_name": "B2B Lead Discovery",
+            "execution_id": "={{ $json.executionId || $execution.id }}",
+            "error_type": "validation_error",
+            "error_message": "={{ $json.validationError }}",
+            "failed_data": "={{ JSON.stringify($json) }}",
+            "timestamp": "={{ $json.timestamp }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "14352370-fe4f-406d-aeae-cc49eb941eac",
+      "name": "Log Validation Errors",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1536,
+        352
+      ],
+      "notes": "Store invalid leads in error log"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "summary-stats",
+              "name": "totalLeadsFound",
+              "value": "={{ $('Store in PostgreSQL').itemMatching(0) ? $runIndex + 1 : 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "failed-count",
+              "name": "validationErrors",
+              "value": "={{ $('Log Validation Errors').itemMatching(0) ? $runIndex + 1 : 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "execution-id",
+              "name": "executionId",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "completed-at",
+              "name": "completedAt",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2f75bccd-86d7-4ae9-94a1-624502f2b9d1",
+      "name": "Summary Statistics",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        256
+      ],
+      "notes": "Aggregate workflow execution results"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Initialize Config').item.json.leadScoringWebhookUrl || 'https://your-n8n-instance.com/webhook/lead-scoring' }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "trigger",
+              "value": "=lead_discovery_complete"
+            },
+            {
+              "name": "executionId",
+              "value": "={{ $json.executionId }}"
+            },
+            {
+              "name": "leadsCount",
+              "value": "={{ $json.totalLeadsFound }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $json.completedAt }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "ed81f80d-4576-4ce2-b478-7f8626bacf11",
+      "name": "Trigger Lead Scoring Workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1984,
+        256
+      ],
+      "continueOnFail": true,
+      "notes": "Webhook to start lead scoring workflow"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  message: 'Lead discovery completed',\n  data: $json\n}) }}",
+        "options": {}
+      },
+      "id": "1721eb59-1ffa-45c3-a340-012639ee738b",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2208,
+        256
+      ],
+      "notes": "Send response if triggered via webhook"
+    },
+    {
+      "parameters": {},
+      "id": "e110904e-5dcd-4aeb-bc2e-9e4e3c6f2784",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        192,
+        1440
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  l.id,\n  l.name,\n  l.email,\n  l.company,\n  l.industry,\n  l.job_title,\n  l.website,\n  ls.score,\n  ls.personalization_notes,\n  ls.recommended_approach,\n  ls.ai_insights\nFROM leads_scored ls\nJOIN leads l ON ls.lead_id = l.id\nWHERE ls.score > 80\n  AND l.email IS NOT NULL\n  AND l.id NOT IN (\n    SELECT lead_id \n    FROM outreach_logs \n    WHERE sent_at > NOW() - INTERVAL '30 days'\n  )\nORDER BY ls.score DESC\nLIMIT 50;",
+        "options": {}
+      },
+      "id": "07225016-62cd-49ef-a8d0-a4a2977f107b",
+      "name": "Fetch High-Score Leads",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        416,
+        1344
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "larger"
+            }
+          ]
+        }
+      },
+      "id": "45199075-f5e4-4977-a226-3ad03b42bff2",
+      "name": "IF Leads Exist",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        640,
+        1344
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "subject_line",
+              "name": "subject_line",
+              "value": "={{ \"Quick question about \" + $json.company + \"'s \" + $json.industry + \" strategy\" }}",
+              "type": "string"
+            },
+            {
+              "id": "email_body",
+              "name": "email_body",
+              "value": "=Hi {{ $json.name.split(' ')[0] }},\n\nI noticed {{ $json.company }}'s work in {{ $json.industry }} and wanted to reach out.\n\n{{ $json.personalization_notes }}\n\n{{ $json.recommended_approach }}\n\nWould you be open to a brief 15-minute conversation next week to explore this further?\n\nBest regards,\n[Your Name]\n[Your Title]\n[Your Company]",
+              "type": "string"
+            },
+            {
+              "id": "lead_id",
+              "name": "lead_id",
+              "value": "={{ $json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "recipient_email",
+              "name": "recipient_email",
+              "value": "={{ $json.email }}",
+              "type": "string"
+            },
+            {
+              "id": "recipient_name",
+              "name": "recipient_name",
+              "value": "={{ $json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "company",
+              "name": "company",
+              "value": "={{ $json.company }}",
+              "type": "string"
+            },
+            {
+              "id": "score",
+              "name": "score",
+              "value": "={{ $json.score }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "780c69e5-956a-4ba6-ab06-fb6682b36c05",
+      "name": "Prepare Email Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        864,
+        1248
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.recipient_email }}",
+        "subject": "={{ $json.subject_line }}",
+        "message": "={{ $json.email_body }}",
+        "options": {
+          "bccList": "",
+          "ccList": ""
+        }
+      },
+      "id": "15c68475-a7ec-455d-a32e-266ed959203f",
+      "name": "Send Email (Gmail)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1088,
+        1248
+      ],
+      "webhookId": "aeadc65d-7944-44f4-9548-505f457cc354"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO outreach_logs (\n  lead_id,\n  email_subject,\n  email_body,\n  sent_at,\n  status,\n  tracking_id\n) VALUES (\n  {{ $json.lead_id }},\n  '{{ $json.subject_line }}',\n  '{{ $json.email_body }}',\n  NOW(),\n  'sent',\n  '{{ $json.message_id }}'\n);",
+        "options": {}
+      },
+      "id": "4578c305-540c-45a6-b118-b42eb7011957",
+      "name": "Log Email Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1312,
+        1184
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle email sending errors\nconst items = $input.all();\nconst errorLogs = [];\n\nfor (const item of items) {\n  if (item.json.error) {\n    errorLogs.push({\n      lead_id: item.json.lead_id,\n      error_message: item.json.error.message || 'Unknown error',\n      failed_at: new Date().toISOString()\n    });\n  }\n}\n\nreturn errorLogs.map(log => ({ json: log }));"
+      },
+      "id": "e9dfb9b8-26dd-40d9-8463-38f62a04b120",
+      "name": "Handle Send Errors",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        1488
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO outreach_logs (\n  lead_id,\n  email_subject,\n  email_body,\n  sent_at,\n  status,\n  error_message\n) VALUES (\n  {{ $json.lead_id }},\n  'Failed to send',\n  '',\n  NOW(),\n  'failed',\n  '{{ $json.error_message }}'\n);",
+        "options": {}
+      },
+      "id": "e1a32f8a-e49b-40c5-8a75-1d606cd75755",
+      "name": "Log Email Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1312,
+        1488
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "062db30b-9c5d-4fc0-8a2a-05b05c4ee519",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [
+        1536,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  COUNT(*) FILTER (WHERE status = 'sent') as emails_sent,\n  COUNT(*) FILTER (WHERE status = 'failed') as emails_failed,\n  COUNT(*) FILTER (WHERE status = 'opened') as emails_opened,\n  COUNT(*) FILTER (WHERE status = 'replied') as emails_replied,\n  ROUND(AVG(score), 2) as avg_lead_score,\n  COUNT(DISTINCT DATE(sent_at)) as days_active\nFROM outreach_logs ol\nJOIN leads_scored ls ON ol.lead_id = ls.lead_id\nWHERE sent_at > NOW() - INTERVAL '7 days';",
+        "options": {}
+      },
+      "id": "0cd1f439-ea85-462d-be5d-cf94a1562e2a",
+      "name": "Calculate Weekly Metrics",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1760,
+        1248
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "report_subject",
+              "name": "report_subject",
+              "value": "=Weekly Outreach Report - {{ $now.format('MMM DD, YYYY') }}",
+              "type": "string"
+            },
+            {
+              "id": "report_body",
+              "name": "report_body",
+              "value": "=📊 **Weekly Outreach Summary**\n\n**Email Performance:**\n✅ Emails Sent: {{ $json.emails_sent }}\n❌ Failed: {{ $json.emails_failed }}\n👁️ Opened: {{ $json.emails_opened }} ({{ Math.round(($json.emails_opened / $json.emails_sent) * 100) }}%)\n💬 Replied: {{ $json.emails_replied }} ({{ Math.round(($json.emails_replied / $json.emails_sent) * 100) }}%)\n\n**Lead Quality:**\n⭐ Average Lead Score: {{ $json.avg_lead_score }}/100\n📅 Active Days: {{ $json.days_active }}\n\n**Engagement Rate:** {{ Math.round((($json.emails_opened + $json.emails_replied) / $json.emails_sent) * 100) }}%\n\n---\nGenerated by n8n Outreach Automation",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "41010829-c8b8-46a3-a841-e80a79f03bef",
+      "name": "Prepare Report",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        1984,
+        1248
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "your-email@example.com",
+        "subject": "={{ $json.report_subject }}",
+        "message": "={{ $json.report_body }}",
+        "options": {}
+      },
+      "id": "05d1b461-a2d1-4658-8bb0-bb42e0fc1413",
+      "name": "Send Report Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2208,
+        1248
+      ],
+      "webhookId": "6b698813-1ec0-4e33-b311-1681a9eff8f3"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  l.name,\n  l.email,\n  l.company,\n  ol.email_subject,\n  ol.sent_at,\n  ol.status,\n  ol.opened_at,\n  ol.replied_at,\n  ls.score\nFROM outreach_logs ol\nJOIN leads l ON ol.lead_id = l.id\nJOIN leads_scored ls ON ol.lead_id = ls.lead_id\nWHERE ol.sent_at > NOW() - INTERVAL '7 days'\nORDER BY ol.sent_at DESC\nLIMIT 100;",
+        "options": {}
+      },
+      "id": "ebd7d018-bfee-4bac-a17a-374589ae2971",
+      "name": "Fetch Detailed Logs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1760,
+        1440
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "your-spreadsheet-id",
+          "mode": "list",
+          "cachedResultName": "Outreach Tracking"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "list",
+          "cachedResultName": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [
+            "email"
+          ],
+          "schema": [
+            {
+              "id": "name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "email",
+              "displayName": "Email",
+              "required": true,
+              "defaultMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "email_subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sent_at",
+              "displayName": "Sent At",
+              "required": false,
+              "defaultMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "score",
+              "displayName": "Lead Score",
+              "required": false,
+              "defaultMatch": true,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3e8cbbd8-cbd2-41b5-baad-28ab92733b85",
+      "name": "Update Tracking Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        1984,
+        1440
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 🚀 Workflow 3: AI-Personalized Outreach\n\n**Purpose:** Automatically send personalized emails to high-quality leads and track engagement.\n\n**Features:**\n- ✉️ Sends emails to leads scoring > 80\n- 📝 Uses AI-generated personalization\n- 📊 Tracks send status and engagement\n- 📈 Generates weekly performance reports\n- 💾 Logs all activity to PostgreSQL\n- 📋 Syncs tracking data to Google Sheets\n\n**Trigger:** Manual or scheduled (via Cron)\n\n**Configuration Required:**\n1. Gmail OAuth2 credentials\n2. PostgreSQL connection\n3. Google Sheets for tracking (optional)\n4. Update report email recipient",
+        "height": 464,
+        "width": 389,
+        "color": 4
+      },
+      "id": "f8e41c3f-c6f6-4a6c-8a47-9a59fd24616f",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2656,
+        1168
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "9dad7815-49d8-45c2-bb43-4e2aaeab2f20",
+      "name": "Schedule (Every Monday 9AM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        192,
+        1248
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "total_leads",
+              "name": "total_leads",
+              "value": "={{ $json.length }}",
+              "type": "number"
+            },
+            {
+              "id": "message",
+              "name": "message",
+              "value": "=No high-scoring leads found for outreach. Check your scoring criteria or lead pipeline.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7a0a047a-9b77-4781-9fa2-9d1d4f6043ab",
+      "name": "No Leads Found",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        864,
+        1440
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE leads_raw \nSET processed = true,\n    processed_at = NOW()\nWHERE id = {{ $json.lead_id }};",
+        "options": {}
+      },
+      "id": "cb4c64bc-0ce6-4816-87c0-57b74a6ad3df",
+      "name": "Mark as Processed (Low)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2848,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "options": {}
+      },
+      "id": "8c0a8e6a-6e76-4309-ae11-1811a8911c41",
+      "name": "Merge All Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        3072,
+        672
+      ],
+      "notes": "Combine high and low score processing results"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "aeae7a69-30d7-464c-80da-7c861f557123",
+      "name": "Daily Lead Processing1",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -64,
+        768
+      ],
+      "notes": "Runs daily at 2 AM to process new leads"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  id,\n  company_name,\n  company_description,\n  company_website,\n  company_industry,\n  company_size,\n  contact_name,\n  contact_email,\n  contact_title,\n  contact_linkedin,\n  data_source,\n  enriched_at\nFROM leads_raw\nWHERE processed = false\n  AND company_description IS NOT NULL\nORDER BY enriched_at DESC\nLIMIT 50;",
+        "options": {}
+      },
+      "id": "eab0e9d2-3296-434a-9e8e-14d3c25ba280",
+      "name": "Fetch Unprocessed Leads1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        160,
+        768
+      ],
+      "notes": "Get leads that haven't been scored yet"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.company_description.length }}",
+              "operation": "larger",
+              "value2": 20
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "bb1b6e11-f655-4582-afd9-ddcf171e63b3",
+      "name": "Filter Valid Leads1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        384,
+        768
+      ],
+      "notes": "Only process leads with sufficient company info"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare data for embedding\nconst items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const embeddingText = `\nCompany: ${item.json.company_name}\nIndustry: ${item.json.company_industry || 'Unknown'}\nSize: ${item.json.company_size || 'Unknown'}\nDescription: ${item.json.company_description}\n  `.trim();\n  \n  output.push({\n    json: {\n      ...item.json,\n      embedding_text: embeddingText,\n      lead_id: item.json.id\n    }\n  });\n}\n\nreturn output;"
+      },
+      "id": "d6a824c5-6064-4099-bb14-134e6b916beb",
+      "name": "Prepare Embedding Data1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        672
+      ],
+      "notes": "Format company data for embedding generation"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"text-embedding-ada-002\",\n  \"input\": {{ JSON.stringify($json.embedding_text) }}\n}",
+        "options": {}
+      },
+      "id": "03c64c1b-6fb5-4cfa-9199-4779c8a34126",
+      "name": "Create Embeddings1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        832,
+        672
+      ],
+      "notes": "Generate embeddings via OpenAI API"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PINECONE_INDEX_URL }}/vectors/upsert",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vectors\": [\n    {\n      \"id\": \"lead_{{ $('Prepare Embedding Data1').item.json.lead_id }}\",\n      \"values\": {{ JSON.stringify($json.data[0].embedding) }},\n      \"metadata\": {\n        \"company_name\": {{ JSON.stringify($('Prepare Embedding Data1').item.json.company_name) }},\n        \"industry\": {{ JSON.stringify($('Prepare Embedding Data1').item.json.company_industry) }},\n        \"lead_id\": {{ $('Prepare Embedding Data1').item.json.lead_id }}\n      }\n    }\n  ],\n  \"namespace\": \"leads\"\n}",
+        "options": {}
+      },
+      "id": "91e0b600-83b9-41ba-8672-3eecae992a0d",
+      "name": "Store in Pinecone1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1056,
+        672
+      ],
+      "notes": "Store embeddings in Pinecone vector database"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare lead data for GPT scoring\nconst items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const originalLead = $('Prepare Embedding Data1').item.json;\n  \n  const leadContext = {\n    company_name: originalLead.company_name,\n    company_description: originalLead.company_description,\n    company_industry: originalLead.company_industry || 'Unknown',\n    company_size: originalLead.company_size || 'Unknown',\n    company_website: originalLead.company_website || '',\n    contact_name: originalLead.contact_name || 'there',\n    contact_title: originalLead.contact_title || 'team member',\n    contact_email: originalLead.contact_email,\n    data_source: originalLead.data_source,\n    lead_id: originalLead.lead_id\n  };\n  \n  output.push({\n    json: {\n      ...item.json,\n      lead_context: leadContext\n    }\n  });\n}\n\nreturn output;"
+      },
+      "id": "22e73b8b-fd39-4959-91b6-4d938a772d69",
+      "name": "Prepare for AI Scoring1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        672
+      ],
+      "notes": "Format lead data for GPT analysis"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a B2B lead qualification expert. Analyze companies and score their fit as potential customers. Consider: company size, industry relevance, growth indicators, and decision-maker accessibility. Respond ONLY with valid JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze this lead and provide a qualification score (0-100) with reasoning:\\n\\nCompany: {{ $json.lead_context.company_name }}\\nIndustry: {{ $json.lead_context.company_industry }}\\nSize: {{ $json.lead_context.company_size }}\\nDescription: {{ $json.lead_context.company_description }}\\nWebsite: {{ $json.lead_context.company_website }}\\nContact: {{ $json.lead_context.contact_name }} ({{ $json.lead_context.contact_title }})\\nSource: {{ $json.lead_context.data_source }}\\n\\nProvide your response as JSON with these fields:\\n- score (0-100)\\n- reasoning (brief explanation)\\n- key_strengths (array of 2-3 points)\\n- potential_concerns (array of 1-2 points)\\n- recommended_action (string: 'high_priority', 'medium_priority', 'low_priority', or 'disqualify')\"\n    }\n  ],\n  \"temperature\": 0.3,\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+        "options": {}
+      },
+      "id": "d13b9496-e01a-46ab-8668-9bb15726d944",
+      "name": "AI Lead Scoring1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1504,
+        672
+      ],
+      "notes": "Use GPT-4 to analyze and score leads"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse AI scoring response\nconst items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  try {\n    const aiResponse = JSON.parse(item.json.choices[0].message.content);\n    const leadContext = item.json.lead_context;\n    \n    output.push({\n      json: {\n        lead_id: leadContext.lead_id,\n        company_name: leadContext.company_name,\n        contact_email: leadContext.contact_email,\n        contact_name: leadContext.contact_name,\n        score: aiResponse.score,\n        reasoning: aiResponse.reasoning,\n        key_strengths: aiResponse.key_strengths,\n        potential_concerns: aiResponse.potential_concerns,\n        recommended_action: aiResponse.recommended_action,\n        scored_at: new Date().toISOString()\n      }\n    });\n  } catch (error) {\n    // Log parsing error\n    const leadContext = item.json.lead_context || {};\n    output.push({\n      json: {\n        lead_id: leadContext.lead_id,\n        company_name: leadContext.company_name,\n        error: 'Failed to parse AI response',\n        raw_response: item.json.choices?.[0]?.message?.content || 'No response',\n        score: 0\n      }\n    });\n  }\n}\n\nreturn output;"
+      },
+      "id": "399d26ce-ee63-451a-ade3-0a47778774eb",
+      "name": "Parse Scoring Results1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        672
+      ],
+      "notes": "Extract and structure AI scoring data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.score }}",
+              "operation": "largerEqual",
+              "value2": 60
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5742f542-c7f4-477e-9ac6-6a26e4f78e17",
+      "name": "Filter High-Score Leads1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1952,
+        672
+      ],
+      "notes": "Only generate emails for leads scoring 60+"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert B2B sales copywriter. Write personalized, compelling cold outreach emails that focus on value and relevance. Keep emails concise (under 150 words), professional, and action-oriented. Respond with valid JSON only.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Write a personalized outreach email for this qualified lead:\\n\\nRecipient: {{ $json.contact_name }}\\nCompany: {{ $json.company_name }}\\nQualification Score: {{ $json.score }}/100\\nKey Strengths: {{ JSON.stringify($json.key_strengths) }}\\n\\nEmail requirements:\\n- Personalized subject line\\n- Brief, value-focused opening\\n- Reference their specific industry/situation\\n- Clear value proposition\\n- Soft call-to-action\\n- Professional signature placeholder\\n\\nProvide response as JSON with fields: subject, body\"\n    }\n  ],\n  \"temperature\": 0.7,\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+        "options": {}
+      },
+      "id": "ed73d939-a603-47b1-8861-9d8d065b4f7f",
+      "name": "Generate Email Content1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2176,
+        576
+      ],
+      "notes": "Create personalized outreach emails with GPT-4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse email generation and combine with scoring\nconst items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const scoringData = $('Parse Scoring Results1').item.json;\n  \n  try {\n    const emailContent = JSON.parse(item.json.choices[0].message.content);\n    \n    output.push({\n      json: {\n        lead_id: scoringData.lead_id,\n        company_name: scoringData.company_name,\n        contact_email: scoringData.contact_email,\n        contact_name: scoringData.contact_name,\n        score: scoringData.score,\n        reasoning: scoringData.reasoning,\n        key_strengths: JSON.stringify(scoringData.key_strengths),\n        potential_concerns: JSON.stringify(scoringData.potential_concerns),\n        recommended_action: scoringData.recommended_action,\n        email_subject: emailContent.subject,\n        email_body: emailContent.body,\n        scored_at: scoringData.scored_at,\n        email_generated: true\n      }\n    });\n  } catch (error) {\n    output.push({\n      json: {\n        lead_id: scoringData.lead_id,\n        company_name: scoringData.company_name,\n        contact_email: scoringData.contact_email,\n        contact_name: scoringData.contact_name,\n        score: scoringData.score,\n        reasoning: scoringData.reasoning,\n        key_strengths: JSON.stringify(scoringData.key_strengths),\n        potential_concerns: JSON.stringify(scoringData.potential_concerns),\n        recommended_action: scoringData.recommended_action,\n        scored_at: scoringData.scored_at,\n        email_generated: false,\n        email_error: 'Failed to generate email: ' + error.message\n      }\n    });\n  }\n}\n\nreturn output;"
+      },
+      "id": "40aa5e17-7d7c-4c45-8365-9c7dd5801f0a",
+      "name": "Combine Results1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        576
+      ],
+      "notes": "Merge scoring and email data"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "name"
+        },
+        "table": {
+          "__rl": true,
+          "value": "leads_scored",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ $json.lead_id }}",
+            "score": "={{ $json.score }}",
+            "reasoning": "={{ $json.reasoning }}",
+            "key_strengths": "={{ $json.key_strengths }}",
+            "potential_concerns": "={{ $json.potential_concerns }}",
+            "recommended_action": "={{ $json.recommended_action }}",
+            "email_subject": "={{ $json.email_subject }}",
+            "email_body": "={{ $json.email_body }}",
+            "scored_at": "={{ $json.scored_at }}"
+          }
+        },
+        "options": {
+          "queryBatching": "transaction"
+        }
+      },
+      "id": "2cc207c0-a1a1-42ae-8d5c-278524ecca77",
+      "name": "Save Scored Leads1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2624,
+        576
+      ],
+      "notes": "Insert scored leads with generated emails"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE leads_raw \nSET processed = true,\n    processed_at = NOW()\nWHERE id = {{ $json.lead_id }};",
+        "options": {}
+      },
+      "id": "2a6d8ba5-797b-41a2-9776-9dacbf58c6aa",
+      "name": "Mark Lead as Processed1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2848,
+        576
+      ],
+      "notes": "Update processing status in raw leads table"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store low-score leads without emails\nconst items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  output.push({\n    json: {\n      lead_id: item.json.lead_id,\n      company_name: item.json.company_name,\n      contact_email: item.json.contact_email,\n      contact_name: item.json.contact_name,\n      score: item.json.score,\n      reasoning: item.json.reasoning,\n      key_strengths: JSON.stringify(item.json.key_strengths),\n      potential_concerns: JSON.stringify(item.json.potential_concerns),\n      recommended_action: item.json.recommended_action,\n      scored_at: item.json.scored_at,\n      email_subject: null,\n      email_body: null\n    }\n  });\n}\n\nreturn output;"
+      },
+      "id": "62331ae6-ae6f-4ee4-a7ec-b556f163bbc2",
+      "name": "Process Low-Score Leads1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        768
+      ],
+      "notes": "Save low-scoring leads without email generation"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "name"
+        },
+        "table": {
+          "__rl": true,
+          "value": "leads_scored",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ $json.lead_id }}",
+            "score": "={{ $json.score }}",
+            "reasoning": "={{ $json.reasoning }}",
+            "key_strengths": "={{ $json.key_strengths }}",
+            "potential_concerns": "={{ $json.potential_concerns }}",
+            "recommended_action": "={{ $json.recommended_action }}",
+            "scored_at": "={{ $json.scored_at }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "0a23752c-d978-4f72-bf47-c2443ed7154f",
+      "name": "Save Low-Score Leads1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2624,
+        768
+      ],
+      "notes": "Insert low-scoring leads"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "name"
+        },
+        "table": {
+          "__rl": true,
+          "value": "error_logs",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow_name": "Workflow 2: AI Lead Enrichment",
+            "error_message": "={{ $json.error || 'Invalid lead data' }}",
+            "error_data": "={{ JSON.stringify($json) }}",
+            "occurred_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "5e7670df-1eb5-46c2-97f5-3b8d7c0c9d4b",
+      "name": "Log Errors1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        608,
+        864
+      ],
+      "notes": "Log any processing errors"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate summary statistics\nconst allItems = $input.all();\n\nif (allItems.length === 0) {\n  return [{\n    json: {\n      total_processed: 0,\n      high_score_count: 0,\n      medium_score_count: 0,\n      low_score_count: 0,\n      average_score: 0,\n      emails_generated: 0,\n      processed_at: new Date().toISOString(),\n      status: 'no_leads_processed'\n    }\n  }];\n}\n\nconst stats = {\n  total_processed: allItems.length,\n  high_score_count: allItems.filter(i => i.json.score >= 60).length,\n  medium_score_count: allItems.filter(i => i.json.score >= 40 && i.json.score < 60).length,\n  low_score_count: allItems.filter(i => i.json.score < 40).length,\n  average_score: Math.round(allItems.reduce((sum, i) => sum + (i.json.score || 0), 0) / allItems.length),\n  emails_generated: allItems.filter(i => i.json.email_subject).length,\n  processed_at: new Date().toISOString(),\n  status: 'success'\n};\n\nreturn [{ json: stats }];"
+      },
+      "id": "c4c9445a-0b5e-4005-a403-bc2fe64285d2",
+      "name": "Generate Summary1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3296,
+        672
+      ],
+      "notes": "Create processing summary statistics"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_WEBHOOK_URL || 'http://localhost:5678' }}/webhook/workflow3-trigger",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"trigger\": \"workflow_2_complete\",\n  \"summary\": {{ JSON.stringify($json) }},\n  \"timestamp\": \"{{ $now.toISO() }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "e015ad16-1ff5-4a23-a30b-093b05e05093",
+      "name": "Trigger Workflow ",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        672
+      ],
+      "notes": "Notify Workflow 3 that scoring is complete"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Initialize Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Config": {
+      "main": [
+        [
+          {
+            "node": "Apollo.io Lead Search",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Phantombuster LinkedIn Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apollo.io Lead Search": {
+      "main": [
+        [
+          {
+            "node": "Normalize Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phantombuster LinkedIn Scraper": {
+      "main": [
+        [
+          {
+            "node": "Normalize Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate & Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate & Validate": {
+      "main": [
+        [
+          {
+            "node": "Split Valid/Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Valid/Invalid": {
+      "main": [
+        [
+          {
+            "node": "Store in PostgreSQL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Validation Errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store in PostgreSQL": {
+      "main": [
+        [
+          {
+            "node": "Summary Statistics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Validation Errors": {
+      "main": [
+        [
+          {
+            "node": "Summary Statistics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summary Statistics": {
+      "main": [
+        [
+          {
+            "node": "Trigger Lead Scoring Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Lead Scoring Workflow": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch High-Score Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule (Every Monday 9AM)": {
+      "main": [
+        [
+          {
+            "node": "Fetch High-Score Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch High-Score Leads": {
+      "main": [
+        [
+          {
+            "node": "IF Leads Exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Leads Exist": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Leads Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Email Data": {
+      "main": [
+        [
+          {
+            "node": "Send Email (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email (Gmail)": {
+      "main": [
+        [
+          {
+            "node": "Log Email Sent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Email Sent": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Send Errors": {
+      "main": [
+        [
+          {
+            "node": "Log Email Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Email Failed": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Calculate Weekly Metrics",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Detailed Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Weekly Metrics": {
+      "main": [
+        [
+          {
+            "node": "Prepare Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Report": {
+      "main": [
+        [
+          {
+            "node": "Send Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Detailed Logs": {
+      "main": [
+        [
+          {
+            "node": "Update Tracking Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Processed (Low)": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge All Results": {
+      "main": [
+        [
+          {
+            "node": "Generate Summary1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Lead Processing1": {
+      "main": [
+        [
+          {
+            "node": "Fetch Unprocessed Leads1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Unprocessed Leads1": {
+      "main": [
+        [
+          {
+            "node": "Filter Valid Leads1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Valid Leads1": {
+      "main": [
+        [
+          {
+            "node": "Prepare Embedding Data1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Errors1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Embedding Data1": {
+      "main": [
+        [
+          {
+            "node": "Create Embeddings1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Embeddings1": {
+      "main": [
+        [
+          {
+            "node": "Store in Pinecone1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store in Pinecone1": {
+      "main": [
+        [
+          {
+            "node": "Prepare for AI Scoring1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare for AI Scoring1": {
+      "main": [
+        [
+          {
+            "node": "AI Lead Scoring1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Lead Scoring1": {
+      "main": [
+        [
+          {
+            "node": "Parse Scoring Results1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Scoring Results1": {
+      "main": [
+        [
+          {
+            "node": "Filter High-Score Leads1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter High-Score Leads1": {
+      "main": [
+        [
+          {
+            "node": "Generate Email Content1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Low-Score Leads1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Email Content1": {
+      "main": [
+        [
+          {
+            "node": "Combine Results1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Results1": {
+      "main": [
+        [
+          {
+            "node": "Save Scored Leads1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Scored Leads1": {
+      "main": [
+        [
+          {
+            "node": "Mark Lead as Processed1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Lead as Processed1": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Low-Score Leads1": {
+      "main": [
+        [
+          {
+            "node": "Save Low-Score Leads1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Low-Score Leads1": {
+      "main": [
+        [
+          {
+            "node": "Mark as Processed (Low)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary1": {
+      "main": [
+        [
+          {
+            "node": "Trigger Workflow ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "869daa87-4ddb-49cd-9c37-c6c5ff9c0b9c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5aed6b2bc9e7adf5bcb3ab78e1b103a65214a7ea2cacddc8010df86b2bde4524"
+  },
+  "id": "duIYeMRRwdPR6hyH",
+  "tags": [
+    {
+      "createdAt": "2025-11-04T15:47:15.041Z",
+      "updatedAt": "2025-11-04T15:47:15.041Z",
+      "id": "RmVdcf3EyC8nenSk",
+      "name": "AI"
+    },
+    {
+      "createdAt": "2025-11-04T15:47:15.062Z",
+      "updatedAt": "2025-11-04T15:47:15.062Z",
+      "id": "sK6JgBbBxvs6AoMm",
+      "name": "Automation"
+    },
+    {
+      "createdAt": "2025-11-05T08:44:02.742Z",
+      "updatedAt": "2025-11-05T08:44:02.742Z",
+      "id": "u97XDEdQFNvZfNPy",
+      "name": "AI Automation"
+    },
+    {
+      "createdAt": "2025-11-04T15:47:15.021Z",
+      "updatedAt": "2025-11-04T15:47:15.021Z",
+      "id": "v8BwtwHEQAqEQplJ",
+      "name": "Sales"
+    },
+    {
+      "createdAt": "2025-11-05T08:44:02.713Z",
+      "updatedAt": "2025-11-05T08:44:02.713Z",
+      "id": "xIyIVjG1StFK3LOQ",
+      "name": "Lead Enrichment"
+    }
+  ]
+}

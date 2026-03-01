@@ -1,0 +1,355 @@
+{
+  "name": "Daily Gmail Summary to Slack",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "1e838e3c-6c5d-42a3-a0ef-48129e4b99b6",
+      "name": "Daily at 8 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1168,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "simple": false,
+        "filters": {},
+        "options": {}
+      },
+      "id": "2539854f-bf0b-424a-9580-0f8e207231e5",
+      "name": "Get Unread Emails",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -944,
+        -96
+      ],
+      "webhookId": "79efeb35-4ba7-4553-a2e6-14883d4f82bc",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J5IZod7fLQuFbyy9",
+          "name": "Gmail account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "36301777-015c-4a06-8695-7409a02698df",
+      "name": "Check Gmail Error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C09P3L1S40M",
+          "mode": "id"
+        },
+        "text": "⚠️ *Gmail Connection Failed*\n\nUnable to retrieve emails. Please check your Gmail credentials and try again.",
+        "otherOptions": {}
+      },
+      "id": "d703f46d-b4fc-449c-af5c-83bfdfe65382",
+      "name": "Notify Error",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        -496,
+        -192
+      ],
+      "webhookId": "08c87cde-4221-425e-941b-0eb77be94ee3",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "FmlC29TrG1YyQmlL",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition-2",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "adb9a1b4-cc32-4599-aa1a-18f2e8674b2f",
+      "name": "Check Has Emails",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C09P3L1S40M",
+          "mode": "id"
+        },
+        "text": "✅ *No New Unread Emails*\n\nNo unread emails found in the last 24 hours.",
+        "otherOptions": {}
+      },
+      "id": "e59d3cf4-d5a8-4ba9-a581-fab02a4161c8",
+      "name": "Notify No Emails",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        -272,
+        96
+      ],
+      "webhookId": "de8b8f7b-ddf1-42eb-aad7-7d48fb25e7cc",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "FmlC29TrG1YyQmlL",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "7be0689b-046c-4950-908b-02040019a0b2",
+      "name": "Process Each Email",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -272,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an AI email assistant. Summarize the following email in 3-5 concise bullet points. Be clear and actionable.\n\n**Subject:** {{ $json.subject }}\n**From:** {{ $json.from }}\n**Body:**\n{{ $json.snippet || $json.plainText || 'No content available' }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 300,
+          "temperature": 0.3
+        }
+      },
+      "id": "5913a5ea-30aa-44ae-8a0d-50929ad13091",
+      "name": "Summarize with GPT-4",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.3,
+      "position": [
+        -48,
+        -176
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "bsdjZcDDTvYlF3in",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C09P3L1S40M",
+          "mode": "id"
+        },
+        "text": "=📩 *Email Summary*\n\n*From:* {{ $('Get Unread Emails').item.json.from }}\n*Subject:* {{ $('Get Unread Emails').item.json.subject }}\n*Received:* {{ $('Get Unread Emails').item.json.internalDate ? new Date(parseInt($('Get Unread Emails').item.json.internalDate)).toLocaleString() : 'Unknown' }}\n\n*Summary:*\n{{ $json.message.content }}\n\n---",
+        "otherOptions": {}
+      },
+      "id": "8a2212bf-6ded-4146-a67e-84d23f08d6e7",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        304,
+        -96
+      ],
+      "webhookId": "1f3a9aea-f949-4dc7-8d6a-9abbbfeb3476",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "FmlC29TrG1YyQmlL",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily at 8 AM": {
+      "main": [
+        [
+          {
+            "node": "Get Unread Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Unread Emails": {
+      "main": [
+        [
+          {
+            "node": "Check Gmail Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Gmail Error": {
+      "main": [
+        [
+          {
+            "node": "Notify Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Has Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Has Emails": {
+      "main": [
+        [
+          {
+            "node": "Process Each Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify No Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Each Email": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Summarize with GPT-4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize with GPT-4": {
+      "main": [
+        [
+          {
+            "node": "Post to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Slack": {
+      "main": [
+        [
+          {
+            "node": "Process Each Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b8de15bb-6b64-4367-ad52-e010bd84af35",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5aed6b2bc9e7adf5bcb3ab78e1b103a65214a7ea2cacddc8010df86b2bde4524"
+  },
+  "id": "OmahglbqUGiJKnG9",
+  "tags": []
+}

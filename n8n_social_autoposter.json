@@ -1,0 +1,173 @@
+{
+  "name": "Daily Social Media Content Auto-Poster",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger-node",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "notes": "Triggers every day at 9:00 AM"
+    },
+    {
+      "parameters": {
+        "url": "https://zenquotes.io/api/random",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "http-request-node",
+      "name": "Get Quote from ZenQuotes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ],
+      "notes": "Fetches a random motivational quote"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "quote-text-assignment",
+              "name": "quoteText",
+              "value": "={{ $json[0].q }}",
+              "type": "string"
+            },
+            {
+              "id": "author-assignment",
+              "name": "author",
+              "value": "={{ $json[0].a }}",
+              "type": "string"
+            },
+            {
+              "id": "post-text-assignment",
+              "name": "postText",
+              "value": "={{ $json[0].q + ' — ' + $json[0].a }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-node",
+      "name": "Format Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        680,
+        300
+      ],
+      "notes": "Formats the quote into a social media post"
+    },
+    {
+      "parameters": {
+        "resource": "tweet",
+        "text": "={{ $json.postText }}",
+        "additionalFields": {}
+      },
+      "id": "twitter-node",
+      "name": "Post to Twitter (X)",
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 2,
+      "position": [
+        900,
+        200
+      ],
+      "credentials": {
+        "twitterOAuth2Api": {
+          "id": "YOUR_TWITTER_CREDENTIAL_ID",
+          "name": "Twitter account"
+        }
+      },
+      "notes": "Posts the formatted quote to Twitter/X"
+    },
+    {
+      "parameters": {
+        "resource": "post",
+        "operation": "create",
+        "text": "={{ $json.postText }}",
+        "additionalFields": {}
+      },
+      "id": "linkedin-node",
+      "name": "Post to LinkedIn",
+      "type": "n8n-nodes-base.linkedin",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ],
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "YOUR_LINKEDIN_CREDENTIAL_ID",
+          "name": "LinkedIn account"
+        }
+      },
+      "notes": "Posts the formatted quote to LinkedIn"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Quote from ZenQuotes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Quote from ZenQuotes": {
+      "main": [
+        [
+          {
+            "node": "Format Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Message": {
+      "main": [
+        [
+          {
+            "node": "Post to Twitter (X)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post to LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2025-10-18T00:00:00.000Z",
+  "versionId": "1"
+}

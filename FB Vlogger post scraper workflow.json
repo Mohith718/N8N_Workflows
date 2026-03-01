@@ -1,0 +1,599 @@
+{
+  "name": "FB Vlogger post scraper workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "Run actor and get dataset",
+        "actorId": {
+          "__rl": true,
+          "value": "KoJrdxJCTtpon81KY",
+          "mode": "list",
+          "cachedResultName": "Facebook Posts Scraper (apify/facebook-posts-scraper)",
+          "cachedResultUrl": "https://console.apify.com/actors/KoJrdxJCTtpon81KY/input"
+        },
+        "customBody": "={\n  \"startUrls\": [\n    {\n      \"url\": \"https://www.facebook.com/RanveerBrar\"\n    }\n  ],\n  \"resultsLimit\": 20\n}\n",
+        "authentication": "apifyOAuth2Api"
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        848,
+        448
+      ],
+      "id": "36a22b7d-747e-4de2-83f0-63dcbe9d8a97",
+      "name": "Run an Actor and get dataset1",
+      "credentials": {
+        "apifyOAuth2Api": {
+          "id": "5SGdqc09mRghYEvU",
+          "name": "Apify account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = [];\n\nfor (const item of items) {\n  const data = item.json;\n\n  // Skip failed or unavailable posts\n  if (data.error) continue;\n  if (!data.user) continue;\n\n  output.push({\n    json: {\n      name: data.user.name || null,\n      profileUrl: data.user.profileUrl || null,\n      likes: typeof data.likes === \"number\" ? data.likes : 0,\n      comments: typeof data.comments === \"number\" ? data.comments : 0,\n      link: data.link || null,\n      facebookUrl: data.topLevelUrl || data.url || null\n    }\n  });\n}\n\nreturn output;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        448
+      ],
+      "id": "94b0ac5e-682c-4e0c-81a0-aebf547755b0",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "operation": "Run actor and get dataset",
+        "actorId": {
+          "__rl": true,
+          "value": "us5srxAYnsrkgUv2v",
+          "mode": "list",
+          "cachedResultName": "Facebook Comments Scraper (apify/facebook-comments-scraper)",
+          "cachedResultUrl": "https://console.apify.com/actors/us5srxAYnsrkgUv2v/input"
+        },
+        "customBody": "={\n  \"startUrls\": [\n    {\n      \"url\": \"{{ $json.Posts_url }}\"\n    }\n  ],\n  \"resultsLimit\": 540\n}\n",
+        "authentication": "apifyOAuth2Api"
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        736,
+        704
+      ],
+      "id": "8ff4844f-7203-43c6-9158-9a6fe90d61d6",
+      "name": "Run an Actor and get dataset",
+      "credentials": {
+        "apifyOAuth2Api": {
+          "id": "5SGdqc09mRghYEvU",
+          "name": "Apify account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg",
+          "mode": "list",
+          "cachedResultName": "Food vloggers",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 777556865,
+          "mode": "list",
+          "cachedResultName": "Sheet2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg/edit#gid=777556865"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Profile Name": "={{ $json.name }}",
+            "Profile URL": "={{ $json.profileUrl }}",
+            "Posts URL": "={{ $json.facebookUrl }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Profile Name",
+              "displayName": "Profile Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Profile URL",
+              "displayName": "Profile URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Posts URL",
+              "displayName": "Posts URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1280,
+        320
+      ],
+      "id": "b2d8db78-350f-42eb-91c5-f7b912d3b3fc",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GxjxahkcrPBiODdz",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const data = item.json;\n\n  return {\n    Comments: data.text || null,\n    Description: data.postTitle || null,\n    FeedbackID: data.feedbackId || null,\n    Date: data.date || data.createdAt || null,\n    Profile_name: data.profileName || null\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        704
+      ],
+      "id": "68db4b1b-975b-43bf-8d58-3f1f77723791",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg",
+          "mode": "list",
+          "cachedResultName": "Food vloggers",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1950446464,
+          "mode": "list",
+          "cachedResultName": "Sheet3",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg/edit#gid=1950446464"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Profile_name": "={{ $json.name }}",
+            "Profile_url": "={{ $json.profileUrl }}",
+            "Posts_url": "={{ $json.facebookUrl }}",
+            "No_of_Comments": "={{ $json.comments }}",
+            "No_of_Likes": "={{ $json.likes }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Profile_name",
+              "displayName": "Profile_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Profile_url",
+              "displayName": "Profile_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Posts_url",
+              "displayName": "Posts_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "No_of_Likes",
+              "displayName": "No_of_Likes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "No_of_Comments",
+              "displayName": "No_of_Comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Comments",
+              "displayName": "Comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Description",
+              "displayName": "Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "FeedbackID",
+              "displayName": "FeedbackID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Date_of_comments",
+              "displayName": "Date_of_comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Profile_name_of_comment",
+              "displayName": "Profile_name_of_comment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1296,
+        528
+      ],
+      "id": "d77091cb-6503-4623-b56d-fe81e4b54390",
+      "name": "Append row in sheet3",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GxjxahkcrPBiODdz",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        624,
+        448
+      ],
+      "id": "513bafc6-48b3-4fae-a945-fab38f314027",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg",
+          "mode": "list",
+          "cachedResultName": "Food vloggers",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg/edit#gid=0"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        528,
+        704
+      ],
+      "id": "3e9025ff-4dd9-466a-9273-03f264c16ace",
+      "name": "Google Sheets Trigger",
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "id": "NvNPQLmiGpspwTp4",
+          "name": "Google Sheets Trigger account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg",
+          "mode": "list",
+          "cachedResultName": "Food vloggers",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1950446464,
+          "mode": "list",
+          "cachedResultName": "Sheet3",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg/edit#gid=1950446464"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Comments": "={{ $json.Comments }}",
+            "Description": "={{ $json.Description }}",
+            "FeedbackID": "={{ $json.FeedbackID }}",
+            "Date_of_comments": "={{ $json.Date }}",
+            "Profile_name_of_comment": "={{ $json.Profile_name }}"
+          },
+          "matchingColumns": [
+            "No_of_Comments"
+          ],
+          "schema": [
+            {
+              "id": "Profile_name",
+              "displayName": "Profile_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Profile_url",
+              "displayName": "Profile_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Posts_url",
+              "displayName": "Posts_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "No_of_Likes",
+              "displayName": "No_of_Likes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "No_of_Comments",
+              "displayName": "No_of_Comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Comments",
+              "displayName": "Comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Description",
+              "displayName": "Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "FeedbackID",
+              "displayName": "FeedbackID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Date_of_comments",
+              "displayName": "Date_of_comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Profile_name_of_comment",
+              "displayName": "Profile_name_of_comment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1248,
+        704
+      ],
+      "id": "e6d58adf-3ddd-47fd-b9fe-b20d40f9a8fe",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GxjxahkcrPBiODdz",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run an Actor and get dataset1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Append row in sheet3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run an Actor and get dataset": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Run an Actor and get dataset1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Trigger": {
+      "main": [
+        [
+          {
+            "node": "Run an Actor and get dataset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "6f9a21f4-cc41-48ed-baee-970949da2de8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c4da5820d3cd1d1e41516312fdb5337ab5a9d175024d82851d2bc655f82fc72d"
+  },
+  "id": "hD9QYFDwZSgmwJvEsekQs",
+  "tags": []
+}

@@ -1,0 +1,406 @@
+{
+  "name": "FB Vlogger post scraper",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "6c7fea7a-0a3b-4f67-9ca9-1f23acf5e932",
+      "name": "When chat message received",
+      "webhookId": "96d1f1ba-6772-40d5-bb79-3f5d774a1252"
+    },
+    {
+      "parameters": {
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "you are Facebook Researcher based on the user request on food vloggers ID. find popular food vloggers ID and give them only ID name in bullet points."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "8a8e788a-b2e2-4a9b-9426-75b80f0bdae8",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        80,
+        208
+      ],
+      "id": "bba191a2-4fbb-45af-8d87-bf943fc8510d",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "UjDnN3oHqndqjxZP",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        256,
+        192
+      ],
+      "id": "8773eb8b-cdb4-429d-8788-7a7b3839d1b6",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n\t\"Food Vlogger name\" : \"name\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        400,
+        192
+      ],
+      "id": "508d4a20-ab91-476d-bef9-8e1c164dba62",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get input text\nconst text = $json.output[\"Food Vlogger name\"];\n\n// Step 1: Normalize text\nlet cleaned = text\n  .replace(/\\d+\\.\\s*/g, \"\")   // remove numbering like \"1. \"\n  .replace(/\\n/g, \",\");       // convert new lines to commas\n\n// Step 2: Split into individual names\nlet names = cleaned\n  .split(\",\")\n  .map(name => name.trim())\n  .filter(name => name.length > 0);\n\n// Step 3: Return each name as a separate item\nreturn names.map(name => ({\n  json: {\n    foodVloggerName: name\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ],
+      "id": "2475ae2c-0be7-434a-9e48-01de2129f2e1",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg",
+          "mode": "list",
+          "cachedResultName": "Food vloggers",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yT_fnK3ZG0KAxP_XAljhu2P42ySNa_NHD9CY02lVWqg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $json.foodVloggerName }}"
+          },
+          "matchingColumns": [
+            "Name"
+          ],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        768,
+        0
+      ],
+      "id": "59f720c4-0ef2-4c98-a3ec-a58a6d05a032",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GxjxahkcrPBiODdz",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "Run actor and get dataset",
+        "actorId": {
+          "__rl": true,
+          "value": "KoJrdxJCTtpon81KY",
+          "mode": "list",
+          "cachedResultName": "Facebook Posts Scraper (apify/facebook-posts-scraper)",
+          "cachedResultUrl": "https://console.apify.com/actors/KoJrdxJCTtpon81KY/input"
+        },
+        "customBody": "={\n  \"startUrls\": [\n    {\n      \"url\": \"https://www.facebook.com/{{ $json.Name }}\"\n    }\n  ],\n  \"resultsLimit\": 50\n}\n",
+        "authentication": "apifyOAuth2Api"
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        976,
+        0
+      ],
+      "id": "ecb9e28d-f5c1-402b-895d-0429693ec294",
+      "name": "Run an Actor and get dataset",
+      "credentials": {
+        "apifyOAuth2Api": {
+          "id": "OkemO34uY8NJ3qHy",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = [];\n\nfor (const item of items) {\n  const data = item.json;\n\n  // Skip failed or unavailable posts\n  if (data.error) continue;\n  if (!data.user) continue;\n\n  output.push({\n    json: {\n      name: data.user.name || null,\n      profileUrl: data.user.profileUrl || null,\n      likes: typeof data.likes === \"number\" ? data.likes : 0,\n      comments: typeof data.comments === \"number\" ? data.comments : 0,\n      link: data.link || null,\n      facebookUrl: data.topLevelUrl || data.url || null\n    }\n  });\n}\n\nreturn output;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        0
+      ],
+      "id": "e557f3a7-2167-4672-98ad-1a67e7893836",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "sNY7FwJLdq5KfS8K",
+          "mode": "list",
+          "cachedResultName": "Vlogger",
+          "cachedResultUrl": "/projects/iAytQcRtHRBM32qF/datatables/sNY7FwJLdq5KfS8K"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $json.name }}",
+            "profileUrl": "={{ $json.profileUrl }}",
+            "likes": "={{ $json.likes }}",
+            "comments": "={{ $json.comments }}",
+            "link": "={{ $json.link }}",
+            "facebookurl": "={{ $json.facebookUrl }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "profileUrl",
+              "displayName": "profileUrl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "likes",
+              "displayName": "likes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "comments",
+              "displayName": "comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "link",
+              "displayName": "link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "facebookurl",
+              "displayName": "facebookurl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1376,
+        0
+      ],
+      "id": "f776f225-7376-4379-b5f0-985267c8c4d4",
+      "name": "Insert row"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Run an Actor and get dataset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run an Actor and get dataset": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Insert row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "0c58b75f-d2ce-4f5b-ae6e-678b711b771d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c4da5820d3cd1d1e41516312fdb5337ab5a9d175024d82851d2bc655f82fc72d"
+  },
+  "id": "hD9QYFDwZSgmwJvEsekQs",
+  "tags": []
+}

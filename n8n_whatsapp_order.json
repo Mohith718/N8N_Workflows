@@ -1,0 +1,473 @@
+{
+  "name": "WhatsApp Order Processing Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-webhook",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "whatsapp-order-trigger"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.message.type}}",
+              "operation": "equals",
+              "value2": "audio"
+            }
+          ]
+        }
+      },
+      "id": "check-message-type",
+      "name": "Is Audio Message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "transcribe",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "transcribe-audio",
+      "name": "Transcribe Audio",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [650, 200],
+      "credentials": {
+        "openAiApi": {
+          "id": "1",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{$json.body.message.audio.url}}",
+        "options": {}
+      },
+      "id": "download-audio",
+      "name": "Download Audio File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 100],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract text from either audio transcription or text message\nlet orderText = '';\nlet customerPhone = '';\nlet customerName = '';\n\nif ($input.item.json.body.message.type === 'audio') {\n  orderText = $input.item.json.text || '';\n} else {\n  orderText = $input.item.json.body.message.text.body || '';\n}\n\ncustomerPhone = $input.item.json.body.message.from || '';\ncustomerName = $input.item.json.body.contact?.name || 'Unknown Customer';\n\nreturn {\n  json: {\n    orderText: orderText,\n    customerPhone: customerPhone,\n    customerName: customerName,\n    timestamp: new Date().toISOString(),\n    rawMessage: $input.item.json\n  }\n};"
+      },
+      "id": "extract-order-text",
+      "name": "Extract Order Details",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "=Extract product names and quantities from this order message. Return ONLY valid JSON array format:\n\nMessage: {{$json.orderText}}\n\nExpected format:\n[\n  {\"product\": \"product name\", \"quantity\": number},\n  {\"product\": \"product name\", \"quantity\": number}\n]\n\nRules:\n- Product names should be clean and standardized\n- Quantities must be numbers\n- Return empty array [] if no products found",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "parse-order-ai",
+      "name": "Parse Order with AI",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "1",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the AI response and extract product list\nlet products = [];\n\ntry {\n  const aiResponse = $input.item.json.text || $input.item.json.choices[0].message.content;\n  \n  // Try to extract JSON from response\n  const jsonMatch = aiResponse.match(/\\[.*\\]/s);\n  if (jsonMatch) {\n    products = JSON.parse(jsonMatch[0]);\n  }\n} catch (error) {\n  console.error('Error parsing AI response:', error);\n  products = [];\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    parsedProducts: products,\n    productCount: products.length\n  }\n};"
+      },
+      "id": "format-products",
+      "name": "Format Product List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": "YOUR_GOOGLE_SHEET_ID",
+        "range": "Products!A:C",
+        "options": {}
+      },
+      "id": "fetch-products",
+      "name": "Fetch Product Database",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [1450, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2",
+          "name": "Google Sheets API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Match ordered products with database and calculate prices\nconst orderedProducts = $input.first().json.parsedProducts || [];\nconst dbProducts = $input.last().json.values || [];\n\n// Create product lookup map (assuming columns: Product Name, Price, Stock)\nconst productMap = {};\nfor (let i = 1; i < dbProducts.length; i++) {\n  const [name, price, stock] = dbProducts[i];\n  if (name) {\n    productMap[name.toLowerCase().trim()] = {\n      name: name,\n      price: parseFloat(price) || 0,\n      stock: parseInt(stock) || 0\n    };\n  }\n}\n\nlet validItems = [];\nlet invalidItems = [];\nlet totalAmount = 0;\n\nfor (const item of orderedProducts) {\n  const productKey = item.product.toLowerCase().trim();\n  const quantity = parseInt(item.quantity) || 1;\n  \n  if (productMap[productKey]) {\n    const dbProduct = productMap[productKey];\n    \n    if (dbProduct.stock >= quantity) {\n      const itemTotal = dbProduct.price * quantity;\n      validItems.push({\n        product: dbProduct.name,\n        quantity: quantity,\n        unitPrice: dbProduct.price,\n        totalPrice: itemTotal,\n        available: true\n      });\n      totalAmount += itemTotal;\n    } else {\n      invalidItems.push({\n        product: item.product,\n        quantity: quantity,\n        reason: `Insufficient stock (Available: ${dbProduct.stock})`\n      });\n    }\n  } else {\n    invalidItems.push({\n      product: item.product,\n      quantity: quantity,\n      reason: 'Product not found in database'\n    });\n  }\n}\n\nreturn {\n  json: {\n    customerPhone: $input.first().json.customerPhone,\n    customerName: $input.first().json.customerName,\n    timestamp: $input.first().json.timestamp,\n    validItems: validItems,\n    invalidItems: invalidItems,\n    totalAmount: totalAmount,\n    orderStatus: validItems.length > 0 ? 'partial_success' : 'failed',\n    validItemCount: validItems.length,\n    invalidItemCount: invalidItems.length\n  }\n};"
+      },
+      "id": "validate-order",
+      "name": "Validate & Calculate Order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.validItemCount}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "check-valid-items",
+      "name": "Has Valid Items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1850, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_GOOGLE_SHEET_ID",
+        "range": "Orders!A:H",
+        "options": {
+          "valueInputMode": "USER_ENTERED"
+        }
+      },
+      "id": "save-order",
+      "name": "Save Order to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [2050, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2",
+          "name": "Google Sheets API"
+        }
+      },
+      "executeOnce": false,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare order data for Google Sheets\nconst order = $input.item.json;\n\nconst rows = [];\n\nfor (const item of order.validItems) {\n  rows.push({\n    json: {\n      values: [\n        order.timestamp,\n        order.customerName,\n        order.customerPhone,\n        item.product,\n        item.quantity,\n        item.unitPrice,\n        item.totalPrice,\n        order.orderStatus\n      ]\n    }\n  });\n}\n\nreturn rows;"
+      },
+      "id": "format-sheet-data",
+      "name": "Format for Sheet",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2050, 100]
+    },
+    {
+      "parameters": {
+        "fromEmail": "orders@yourdomain.com",
+        "toEmail": "owner@yourdomain.com",
+        "subject": "=New Order from {{$json.customerName}}",
+        "text": "=**New Order Received**\n\nCustomer: {{$json.customerName}}\nPhone: {{$json.customerPhone}}\nTime: {{$json.timestamp}}\n\n**Order Items:**\n{{$json.validItems.map(item => `- ${item.product} x ${item.quantity} = $${item.totalPrice}`).join('\\n')}}\n\n**Total Amount: ${{$json.totalAmount}}**\n\n{{$json.invalidItems.length > 0 ? '**Unavailable Items:**\\n' + $json.invalidItems.map(item => `- ${item.product} (${item.reason})`).join('\\n') : ''}}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Send Email to Owner",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [2250, 200],
+      "credentials": {
+        "smtp": {
+          "id": "3",
+          "name": "SMTP Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate confirmation message\nconst order = $input.item.json;\n\nlet message = `✅ Order Confirmed!\\n\\n`;\nmessage += `Dear ${order.customerName},\\n\\n`;\nmessage += `Thank you for your order!\\n\\n`;\nmessage += `**Order Summary:**\\n`;\n\nfor (const item of order.validItems) {\n  message += `• ${item.product} x ${item.quantity} = $${item.totalPrice.toFixed(2)}\\n`;\n}\n\nmessage += `\\n**Total: $${order.totalAmount.toFixed(2)}**\\n\\n`;\n\nif (order.invalidItems.length > 0) {\n  message += `⚠️ **Some items were unavailable:**\\n`;\n  for (const item of order.invalidItems) {\n    message += `• ${item.product} - ${item.reason}\\n`;\n  }\n  message += `\\n`;\n}\n\nmessage += `Your order has been received and will be processed shortly.\\n\\n`;\nmessage += `Order ID: ${Date.now()}\\n`;\nmessage += `Date: ${new Date(order.timestamp).toLocaleString()}`;\n\nreturn {\n  json: {\n    ...order,\n    confirmationMessage: message\n  }\n};"
+      },
+      "id": "create-confirmation",
+      "name": "Create Confirmation Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "messaging_product",
+              "value": "whatsapp"
+            },
+            {
+              "name": "to",
+              "value": "={{$json.customerPhone}}"
+            },
+            {
+              "name": "type",
+              "value": "text"
+            },
+            {
+              "name": "text",
+              "value": "={\"body\": \"{{$json.confirmationMessage}}\"}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-whatsapp",
+      "name": "Send WhatsApp Confirmation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2450, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4",
+          "name": "WhatsApp API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "messaging_product",
+              "value": "whatsapp"
+            },
+            {
+              "name": "to",
+              "value": "={{$json.customerPhone}}"
+            },
+            {
+              "name": "type",
+              "value": "text"
+            },
+            {
+              "name": "text",
+              "value": "={\"body\": \"Sorry, none of the requested products are currently available. Please check our catalog and try again.\"}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-error-whatsapp",
+      "name": "Send Error Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2050, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4",
+          "name": "WhatsApp API Token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook": {
+      "main": [
+        [
+          {
+            "node": "Is Audio Message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Audio Message?": {
+      "main": [
+        [
+          {
+            "node": "Download Audio File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Order Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Audio File": {
+      "main": [
+        [
+          {
+            "node": "Transcribe Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe Audio": {
+      "main": [
+        [
+          {
+            "node": "Extract Order Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Order Details": {
+      "main": [
+        [
+          {
+            "node": "Parse Order with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Order with AI": {
+      "main": [
+        [
+          {
+            "node": "Format Product List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Product List": {
+      "main": [
+        [
+          {
+            "node": "Fetch Product Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Product Database": {
+      "main": [
+        [
+          {
+            "node": "Validate & Calculate Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Calculate Order": {
+      "main": [
+        [
+          {
+            "node": "Has Valid Items?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Valid Items?": {
+      "main": [
+        [
+          {
+            "node": "Format for Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Sheet": {
+      "main": [
+        [
+          {
+            "node": "Save Order to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Order to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Send Email to Owner",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Confirmation Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Confirmation Message": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2025-06-02T00:00:00.000Z",
+  "versionId": "1"
+}

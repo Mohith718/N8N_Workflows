@@ -1,0 +1,742 @@
+{
+  "name": "LinkedIn Post Automation via Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "image",
+        "prompt": "={{ 'Create a professional, high-quality image for a LinkedIn post about: ' + $json.topic + '.\\n\\nStyle: Professional, modern, clean, suitable for corporate social media.\\nComposition: Eye-catching but not overly busy.\\nColors: Professional color palette.\\nNo text overlays in the image.' }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        1088
+      ],
+      "id": "d3b89153-ac0b-4f77-8b5b-1cd138a605fc",
+      "name": "Generate AI Image",
+      "credentials": {
+        "openAiApi": {
+          "id": "UjDnN3oHqndqjxZP",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.photoFileId }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        272,
+        1360
+      ],
+      "id": "4d4fb0cf-2b50-4659-9621-9a95a87ddddc",
+      "name": "Download User Photo",
+      "webhookId": "bee1af58-3bc0-451b-b780-14809458b509",
+      "credentials": {
+        "telegramApi": {
+          "id": "i94cG3Xuix81xQnI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        560,
+        1136
+      ],
+      "id": "1af69dfa-3509-46c9-868e-dfed1a4e5afa",
+      "name": "Merge Content & Image"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare data for LinkedIn posting\nconst items = $input.all();\nconst intentData = $('Parse Intent1').first().json;\n\nlet postText = intentData.userText;\nlet imageData = null;\nlet hasImage = false;\n\n// Extract generated content from Gemini response\nfor (const item of items) {\n  if (item.json.content && item.json.content.parts && item.json.content.parts[0]) {\n    postText = item.json.content.parts[1].text;\n  }\n  // Check for binary image data\n  if (item.binary && item.binary.data) {\n    imageData = item.binary.data;\n    hasImage = true;\n  }\n}\n\nreturn {\n  json: {\n    postText: postText,\n    hasImage: hasImage,\n    chatId: intentData.chatId\n  },\n  binary: imageData ? { data: imageData } : {}\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        1152
+      ],
+      "id": "84c78dd4-50cd-4603-a279-77afca2a19a6",
+      "name": "Prepare LinkedIn Data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "has-image-final",
+              "leftValue": "={{ $json.hasImage }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1008,
+        1152
+      ],
+      "id": "d8909bbe-27c1-412d-ac9c-b56172c55243",
+      "name": "Final Image Check"
+    },
+    {
+      "parameters": {
+        "person": "VPcEm_BgqR",
+        "text": "={{ $json.postText }}",
+        "shareMediaCategory": "IMAGE",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.linkedIn",
+      "typeVersion": 1,
+      "position": [
+        1232,
+        1056
+      ],
+      "id": "cb0082e0-55c8-4d9d-929c-25e747d34595",
+      "name": "Post with Image",
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "cbEmHqwFz5xAueNu",
+          "name": "LinkedIn account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "person": "VPcEm_BgqR",
+        "text": "={{ $json.postText }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.linkedIn",
+      "typeVersion": 1,
+      "position": [
+        1232,
+        1248
+      ],
+      "id": "31b1572b-8009-4f8f-89d6-bc0d3c551adf",
+      "name": "Post Text Only",
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "cbEmHqwFz5xAueNu",
+          "name": "LinkedIn account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1456,
+        1152
+      ],
+      "id": "7ec3b053-9d4d-444f-a921-1fc30f7a8b8e",
+      "name": "Merge Post Results"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.successMessage }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1904,
+        1152
+      ],
+      "id": "fda35d12-f571-42e3-a1db-6f2f4a702460",
+      "name": "Send Success Message",
+      "webhookId": "fa39cf80-451a-4d60-8bef-957a779212f6",
+      "credentials": {
+        "telegramApi": {
+          "id": "i94cG3Xuix81xQnI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "*"
+        ],
+        "additionalFields": {
+          "download": true,
+          "imageSize": "large"
+        }
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1040,
+        1152
+      ],
+      "id": "3346792b-5c25-4b2b-bfbd-dba383eaf92c",
+      "name": "Telegram Trigger1",
+      "webhookId": "18ef5806-167d-4d8b-8cd3-1b45a7e5e9ad",
+      "credentials": {
+        "telegramApi": {
+          "id": "i94cG3Xuix81xQnI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "chatId",
+              "value": "={{ $json.message.chat.id }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "userText",
+              "value": "={{ $json.message.text || $json.message.caption || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "hasPhoto",
+              "value": "={{ $json.message.photo ? true : false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "4",
+              "name": "photoFileId",
+              "value": "={{ $json.message.photo ? $json.message.photo[$json.message.photo.length - 1].file_id : '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -816,
+        1152
+      ],
+      "id": "dc654315-2fe9-464f-bfbc-5b59ebb10517",
+      "name": "Extract Message Data1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.userText }}",
+        "options": {
+          "systemMessage": "=You are a LinkedIn post assistant analyzing user requests from Telegram.\n\nCONTEXT:\n- User may send TEXT ONLY\n- User may send PHOTO with CAPTION text\n- User may send PHOTO without any text\n\nYOUR TASK:\nDetermine what the user wants:\n1. Generate POST CONTENT (text)?\n2. Generate an AI IMAGE?\n3. Both content and image?\n\nIMPORTANT RULES:\n- If user uploaded a PHOTO, they want to USE that photo (set needsImage=false)\n- If user says \"generate image\" or \"create image\" without uploading, set needsImage=true\n- If text is empty or very short (like \"post this\"), assume they want content generated about their uploaded photo\n\nRESPONSE FORMAT:\nRespond ONLY with this exact JSON format (no markdown, no backticks, no extra text):\n{\"needsContent\": true/false, \"needsImage\": true/false, \"topic\": \"brief topic description\"}\n\nEXAMPLES:\n\nInput: \"Create a post about AI in healthcare\"\nOutput: {\"needsContent\": true, \"needsImage\": false, \"topic\": \"AI in healthcare\"}\n\nInput: \"Generate an image about climate change\"\nOutput: {\"needsContent\": false, \"needsImage\": true, \"topic\": \"climate change\"}\n\nInput: \"Write a post with image about remote work\"\nOutput: {\"needsContent\": true, \"needsImage\": true, \"topic\": \"remote work\"}\n\nInput: [photo uploaded] + \"Write a professional post about this\"\nOutput: {\"needsContent\": true, \"needsImage\": false, \"topic\": \"the uploaded image content\"}\n\nInput: [photo uploaded] + \"post this\"\nOutput: {\"needsContent\": true, \"needsImage\": false, \"topic\": \"the uploaded image\"}\n\nInput: [photo uploaded] + \"Create a viral post about AI Agents vs Agentic AI\"\nOutput: {\"needsContent\": true, \"needsImage\": false, \"topic\": \"AI Agents vs Agentic AI\"}\n\nInput: \"Make a post and image about sustainability\"\nOutput: {\"needsContent\": true, \"needsImage\": true, \"topic\": \"sustainability\"}\n\nREMEMBER: \n- Always respond with valid JSON only\n- If user uploaded photo, needsImage is always FALSE\n- Extract the main topic from user's text\n- If topic is unclear, use \"general LinkedIn post\" as topic"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -592,
+        1152
+      ],
+      "id": "ce973efd-bc3e-4ee9-9a89-7ab0f3b16f0c",
+      "name": "AI Intent Analyzer1"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -608,
+        1360
+      ],
+      "id": "0ebafcb9-c6a3-42e6-84d4-571fa0343572",
+      "name": "OpenAI Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "UjDnN3oHqndqjxZP",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse AI response and combine with message data\nconst aiResponse = $input.first().json.output;\nconst messageData = $('Extract Message Data1').first().json;\n\nlet parsedIntent;\ntry {\n  const jsonMatch = aiResponse.match(/\\{[^}]+\\}/);\n  parsedIntent = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(aiResponse);\n} catch (e) {\n  parsedIntent = {\n    needsContent: true,\n    needsImage: false,\n    topic: messageData.userText\n  };\n}\n\nreturn {\n  json: {\n    chatId: messageData.chatId,\n    userText: messageData.userText,\n    hasPhoto: messageData.hasPhoto,\n    photoFileId: messageData.photoFileId,\n    needsContent: parsedIntent.needsContent,\n    needsImage: parsedIntent.needsImage && !messageData.hasPhoto,\n    topic: parsedIntent.topic || messageData.userText\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        1152
+      ],
+      "id": "8908bc2f-4edd-4721-a6e6-17824cc8b3f2",
+      "name": "Parse Intent1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "needs-content",
+              "leftValue": "={{ $json.needsContent }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -16,
+        864
+      ],
+      "id": "61250541-5de9-449e-9027-375f275c3262",
+      "name": "Needs Content?1"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ 'Generate a professional, engaging LinkedIn post about: ' + $json.topic + '.\\n\\nRequirements:\\n- Professional tone suitable for LinkedIn\\n- 150-250 words\\n- Include 3-5 relevant hashtags\\n- Make it engaging and actionable\\n- Use line breaks for readability\\n\\nReturn ONLY the post text, no explanations.' }}"
+            },
+            {
+              "content": "=## LinkedIn Post Generation Prompt (For Automation Agent)\n\n### Role\nYou are a professional LinkedIn post writer.\nYou write posts optimized for reach and hiring visibility.\nYour writing is plain, direct, and proof-based.\nYou never use hype, emotion, or self-praise.\n\n---\n\n### Writing Rules (Mandatory)\n\n#### Language\n- Use simple, natural English.\n- No fancy words.\n- No emotional or motivational tone.\n- Do not sound like AI-generated content.\n\n#### Tone\n- Neutral\n- Direct\n- Professional\n- Logical\n\n---\n\n### Structure (Strict)\n\n#### Opening Line (1 line only)\n- Must show **tool or skill + result or outcome**\n- Example:\n  > I used n8n + AI to reduce manual work from 4 hours to 10 minutes.\n\n#### Explanation (2–4 short lines)\n- Each line under **15 words**\n- Explain what was built, not feelings\n- No filler words\n\n#### Results Section (Exactly 3 bullet points)\nEach bullet must include:\n- A number\n- A before → after change\n- A tool name\n\nExample:\n- Report creation: 5 hours → 30 minutes (Python)\n\n#### Ending (1 simple ask)\nChoose one only:\n- I am open for internships.\n- I take freelance automation work.\n- Message me if you need this.\n- Open to full-time roles.\n\nNo questions. No emojis.\n\n---\n\n### Hashtags\n- Maximum 3 hashtags\n- Job-focused only\n- Examples:\n  - #Automation\n  - #AI\n  - #Python\n  - #DataAnalytics\n\n---\n\n### Content Guidelines\n- Focus on **skill → action → result**\n- Avoid words like:\n  - excited\n  - proud\n  - thrilled\n  - happy\n  - grateful\n- No long paragraphs\n- No personal stories unless they prove a result\n- Assume the reader is a recruiter, founder, or hiring manager\n\n---\n\n### Input Format (From Workflow)\nYou will receive:\n- Project name\n- Tools used\n- Problem solved\n- Time or effort saved\n- Target role (internship, freelance, job)\n\nUse only the given input.\nDo not invent achievements.\n\n---\n\n### Output Format\n- Markdown\n- Clean spacing\n- Ready to post on LinkedIn\n",
+              "role": "model"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        784
+      ],
+      "id": "dadd70e8-eb52-4e90-a95f-9ddb6fd9cf41",
+      "name": "Generate Post Content1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "SgSXLURnz7IswDf0",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "needs-image",
+              "leftValue": "={{ $json.needsImage }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -16,
+        1152
+      ],
+      "id": "926c0dbf-8a7a-4889-92eb-5894b204ec78",
+      "name": "Needs AI Image?1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-photo",
+              "leftValue": "={{ $json.hasPhoto }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -16,
+        1392
+      ],
+      "id": "e3e3e1c9-94d6-42b5-b245-3557fbf259ea",
+      "name": "Has User Photo?1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "postUrl",
+              "value": "={{ $json.postUrl || 'https://linkedin.com' }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "chatId",
+              "value": "={{ $('Parse Intent1').first().json.chatId }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "successMessage",
+              "value": "✅ Your LinkedIn post has been published successfully!",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1680,
+        1152
+      ],
+      "id": "6a37a272-e828-419a-a807-adb1edd928c8",
+      "name": "Format Response1"
+    }
+  ],
+  "pinData": {
+    "Post with Image": [
+      {
+        "json": {
+          "urn": "urn:li:share:7415700176285192192"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Generate AI Image": {
+      "main": [
+        [
+          {
+            "node": "Merge Content & Image",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Download User Photo": {
+      "main": [
+        [
+          {
+            "node": "Merge Content & Image",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Content & Image": {
+      "main": [
+        [
+          {
+            "node": "Prepare LinkedIn Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare LinkedIn Data": {
+      "main": [
+        [
+          {
+            "node": "Final Image Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Image Check": {
+      "main": [
+        [
+          {
+            "node": "Post with Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Post Text Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post with Image": {
+      "main": [
+        [
+          {
+            "node": "Merge Post Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Text Only": {
+      "main": [
+        [
+          {
+            "node": "Merge Post Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Post Results": {
+      "main": [
+        [
+          {
+            "node": "Format Response1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger1": {
+      "main": [
+        [
+          {
+            "node": "Extract Message Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Message Data1": {
+      "main": [
+        [
+          {
+            "node": "AI Intent Analyzer1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Intent Analyzer1": {
+      "main": [
+        [
+          {
+            "node": "Parse Intent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Intent Analyzer1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Intent1": {
+      "main": [
+        [
+          {
+            "node": "Needs Content?1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Needs AI Image?1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has User Photo?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Content?1": {
+      "main": [
+        [
+          {
+            "node": "Generate Post Content1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Content & Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Post Content1": {
+      "main": [
+        [
+          {
+            "node": "Merge Content & Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs AI Image?1": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Content & Image",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Has User Photo?1": {
+      "main": [
+        [
+          {
+            "node": "Download User Photo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Content & Image",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Format Response1": {
+      "main": [
+        [
+          {
+            "node": "Send Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "937aad09-65d2-464d-aba8-7186bd780112",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c4da5820d3cd1d1e41516312fdb5337ab5a9d175024d82851d2bc655f82fc72d"
+  },
+  "id": "RxqvdK3xkfjFdL1EQq_Up",
+  "tags": []
+}

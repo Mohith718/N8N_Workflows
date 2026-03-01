@@ -1,0 +1,659 @@
+{
+  "name": "AI Lead Generation & Appointment Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1216,
+        80
+      ],
+      "id": "c2c6e1ab-856b-4f5f-8d51-16790d66f158",
+      "name": "Daily at 10 AM"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -992,
+        80
+      ],
+      "id": "013737b9-1058-48a0-9a79-fd7bd2ba8fcb",
+      "name": "Fetch All Leads",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GxjxahkcrPBiODdz",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter only unprocessed leads (where 'Processed' column is empty or false)\nconst items = $input.all();\nconst unprocessedLeads = items.filter(item => {\n  const processed = item.json.Processed || item.json.processed || '';\n  return processed === '' || processed === 'FALSE' || processed === false;\n});\n\n// Take only first 10 unprocessed leads\nconst leadsToProcess = unprocessedLeads.slice(0, 10);\n\nif (leadsToProcess.length === 0) {\n  throw new Error('No unprocessed leads found. All 100 leads have been processed!');\n}\n\nreturn leadsToProcess;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -768,
+        80
+      ],
+      "id": "e4e5f3b9-b094-4a8f-ae5d-71f7cc47e45b",
+      "name": "Filter 10 Unprocessed Leads"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "uuid1",
+              "name": "fullName",
+              "value": "={{ $json.Name || $json.name || 'Valued Client' }}",
+              "type": "string"
+            },
+            {
+              "id": "uuid2",
+              "name": "firstName",
+              "value": "={{ ($json.Name || $json.name || 'Valued Client').split(' ')[0] }}",
+              "type": "string"
+            },
+            {
+              "id": "uuid3",
+              "name": "email",
+              "value": "={{ $json.Email || $json.email || $json.Mails }}",
+              "type": "string"
+            },
+            {
+              "id": "uuid4",
+              "name": "phone",
+              "value": "={{ $json['Phone number'] || $json.phone || $json.Phone }}",
+              "type": "string"
+            },
+            {
+              "id": "uuid5",
+              "name": "linkedinUrl",
+              "value": "={{ $json.LinkedIn || $json.linkedin || $json['LinkedIn URL'] || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "uuid6",
+              "name": "rowNumber",
+              "value": "={{ $json.row_number || $itemIndex + 2 }}",
+              "type": "number"
+            },
+            {
+              "id": "uuid7",
+              "name": "companyName",
+              "value": "={{ $json.Company || $json.company || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "uuid8",
+              "name": "industry",
+              "value": "={{ $json.Industry || $json.industry || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -560,
+        80
+      ],
+      "id": "ab5ece4b-2e18-4794-8533-c207dff6e26e",
+      "name": "Normalize Lead Data"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "condition-email-exists",
+                    "leftValue": "={{ $json.email }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists"
+                    }
+                  },
+                  {
+                    "id": "condition-email-valid",
+                    "leftValue": "={{ $json.email }}",
+                    "rightValue": "@",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Has Email"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "condition-phone-exists",
+                    "leftValue": "={{ $json.phone }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists"
+                    }
+                  },
+                  {
+                    "id": "condition-phone-length",
+                    "leftValue": "={{ $json.phone.toString().replace(/\\D/g, '').length }}",
+                    "rightValue": 10,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Has Phone"
+            }
+          ]
+        },
+        "options": {
+          "allMatchingOutputs": true
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -336,
+        80
+      ],
+      "id": "fb10809c-f2bb-4925-84d9-e5f091250865",
+      "name": "Route by Contact Method"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash-exp",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an expert B2B sales copywriter specializing in AI automation and business growth services.\n\n## CONTEXT\nClient Name: {{ $json.firstName }}\nFull Name: {{ $json.fullName }}\nCompany: {{ $json.companyName || 'their business' }}\nIndustry: {{ $json.industry || 'their industry' }}\nLinkedIn: {{ $json.linkedinUrl || 'N/A' }}\n\n## YOUR TASK\nWrite a highly personalized cold email that:\n1. Addresses the recipient by first name\n2. References their company/industry if available\n3. Identifies a specific pain point relevant to their business\n4. Presents AI automation as the solution\n5. Demonstrates credibility with a brief case study or statistic\n6. Includes a clear call-to-action for booking a discovery call\n\n## EMAIL REQUIREMENTS\n- Length: 150-200 words\n- Tone: Professional, consultative, confident (not pushy)\n- Structure: Problem → Solution → Proof → Call-to-Action\n- Include a compelling subject line\n- Mention specific benefits: 10X revenue growth potential, 70% time savings, or improved operational efficiency\n\n## FORMATTING RULES\n- Start with: **Subject:** [your subject line]\n- Use short paragraphs (2-3 sentences max)\n- Include ONE specific metric or case study\n- End with a scheduling link placeholder: [BOOK A CALL]\n- Sign off professionally\n\n## WRITING STYLE\n- Use active voice\n- Be specific, not generic\n- Focus on business outcomes, not technical features\n- Create urgency without being aggressive\n- Sound like a trusted advisor, not a salesperson\n\n## WHAT TO AVOID\n- Emojis or casual language\n- Multiple CTAs\n- Overpromising or hype\n- Technical jargon\n- Generic templates\n\nNow write the email."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -112,
+        -16
+      ],
+      "id": "226cf770-5de7-4e2c-9c78-48e5101b1987",
+      "name": "Generate Personalized Email",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "SgSXLURnz7IswDf0",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract email content from AI response\nconst response = $input.first().json;\nconst content = response.content?.parts?.[0]?.text || response.text || '';\n\nif (!content) {\n  throw new Error('AI did not generate email content');\n}\n\n// Parse subject and body\nconst subjectMatch = content.match(/\\*\\*Subject:\\*\\*\\s*(.+?)(?:\\n|$)/i);\nconst subject = subjectMatch ? subjectMatch[1].trim() : 'AI Automation Can 10X Your Business Growth';\n\n// Remove subject line and metadata from body\nlet body = content\n  .replace(/\\*\\*Subject:\\*\\*.*?(?:\\n|$)/i, '')\n  .trim();\n\n// Replace placeholder with actual booking link\nconst bookingLink = 'https://calendly.com/your-company/discovery-call'; // Replace with your actual link\nbody = body.replace(/\\[BOOK A CALL\\]/gi, bookingLink);\n\n// Get lead data from previous node\nconst leadData = $('Normalize Lead Data').first().json;\n\nreturn [{\n  json: {\n    subject,\n    body,\n    to: leadData.email,\n    firstName: leadData.firstName,\n    fullName: leadData.fullName,\n    rowNumber: leadData.rowNumber\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        -16
+      ],
+      "id": "61523aca-a8bd-4133-a62f-948aa7082e46",
+      "name": "Parse Email Content"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false,
+          "bccList": "",
+          "ccList": ""
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        432,
+        -16
+      ],
+      "id": "81d270a3-cc8d-4096-8b7f-b5b39dbdadb9",
+      "name": "Send Email via Gmail",
+      "webhookId": "c596e153-c29b-4fb2-a92e-ec20b3000a4f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "3nFo1DvB4aQcry4Q",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash-exp",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an expert SMS copywriter for B2B outreach.\n\n## CONTEXT\nRecipient Name: {{ $json.firstName }}\nCompany: {{ $json.companyName || 'their business' }}\nPhone: {{ $json.phone }}\n\n## YOUR TASK\nWrite a professional SMS message about AI automation services that can 10X business growth.\n\n## SMS REQUIREMENTS\n- Maximum length: 160 characters (strict)\n- Personalize with first name\n- Mention one key benefit (time savings or revenue growth)\n- Include clear call-to-action\n- Professional but conversational tone\n\n## STRUCTURE\n1. Greeting with name\n2. One sentence value proposition\n3. Soft CTA (reply or call)\n\n## RULES\n- NO emojis\n- NO links (SMS will include reply instructions)\n- NO multiple sentences per point\n- Use simple, direct language\n- Sound human, not robotic\n\n## EXAMPLE STYLE\nHi [Name], AI automation helped businesses like yours achieve 10X growth. Free 15-min call? Reply YES.\n\nNow write the SMS. Output ONLY the message text, nothing else."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -112,
+        192
+      ],
+      "id": "f7af0da4-1fa6-4d25-bf4a-f0ce313b5cbe",
+      "name": "Generate Personalized SMS",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "SgSXLURnz7IswDf0",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract SMS content from AI response\nconst response = $input.first().json;\nlet smsText = response.content?.parts?.[0]?.text || response.text || '';\n\nif (!smsText) {\n  throw new Error('AI did not generate SMS content');\n}\n\n// Clean the SMS text\nsmsText = smsText.trim();\n\n// Ensure it's under 160 characters\nif (smsText.length > 160) {\n  smsText = smsText.substring(0, 157) + '...';\n}\n\n// Get lead data from previous node\nconst leadData = $('Normalize Lead Data').first().json;\n\n// Format phone number for Twilio (ensure it has country code)\nlet phoneNumber = leadData.phone.toString().replace(/\\D/g, '');\nif (!phoneNumber.startsWith('1') && phoneNumber.length === 10) {\n  phoneNumber = '1' + phoneNumber; // Add US country code if missing\n}\nphoneNumber = '+' + phoneNumber;\n\nreturn [{\n  json: {\n    message: smsText,\n    to: phoneNumber,\n    firstName: leadData.firstName,\n    rowNumber: leadData.rowNumber\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        192
+      ],
+      "id": "44850cb7-2ccd-4e77-bf7f-43a55dfe5d2f",
+      "name": "Parse SMS Content"
+    },
+    {
+      "parameters": {
+        "from": "+18632608122",
+        "to": "={{ $json.to }}",
+        "message": "={{ $json.message }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        432,
+        192
+      ],
+      "id": "9280612e-e033-4948-bfc2-bd745a36f147",
+      "name": "Send SMS via Twilio",
+      "credentials": {
+        "twilioApi": {
+          "id": "LpqS5yzLKX8DKmQL",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Processed": "=TRUE",
+            "ProcessedDate": "={{ $now.toISO() }}",
+            "ContactMethod": "=Email",
+            "Status": "=Sent"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        656,
+        -16
+      ],
+      "id": "1974b948-1166-42f1-bc8c-083dca447dc8",
+      "name": "Mark Email as Processed",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GxjxahkcrPBiODdz",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Processed": "=TRUE",
+            "ProcessedDate": "={{ $now.toISO() }}",
+            "ContactMethod": "=SMS",
+            "Status": "=Sent"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        656,
+        192
+      ],
+      "id": "175b1f8e-1978-4351-908e-346abe3eb442",
+      "name": "Mark SMS as Processed",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GxjxahkcrPBiODdz",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Wait for all branches to complete and merge results\nconst emailResults = $input.all().filter(item => item.json.ContactMethod === 'Email');\nconst smsResults = $input.all().filter(item => item.json.ContactMethod === 'SMS');\n\nconst totalProcessed = emailResults.length + smsResults.length;\nconst emailCount = emailResults.length;\nconst smsCount = smsResults.length;\n\nreturn [{\n  json: {\n    date: new Date().toISOString().split('T')[0],\n    totalProcessed,\n    emailsSent: emailCount,\n    smsSent: smsCount,\n    message: `Successfully processed ${totalProcessed} leads: ${emailCount} emails and ${smsCount} SMS messages sent.`\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        96
+      ],
+      "id": "53dff7ee-792c-4d38-9a22-e848d9d7cc91",
+      "name": "Merge & Summary"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=1",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1088,
+        96
+      ],
+      "id": "aea83d69-d18e-4d72-8670-b3fdc43f7de6",
+      "name": "Log Daily Summary",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GxjxahkcrPBiODdz",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily at 10 AM": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Leads": {
+      "main": [
+        [
+          {
+            "node": "Filter 10 Unprocessed Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter 10 Unprocessed Leads": {
+      "main": [
+        [
+          {
+            "node": "Normalize Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Route by Contact Method",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Contact Method": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Personalized SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Email": {
+      "main": [
+        [
+          {
+            "node": "Parse Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Email Content": {
+      "main": [
+        [
+          {
+            "node": "Send Email via Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email via Gmail": {
+      "main": [
+        [
+          {
+            "node": "Mark Email as Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized SMS": {
+      "main": [
+        [
+          {
+            "node": "Parse SMS Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse SMS Content": {
+      "main": [
+        [
+          {
+            "node": "Send SMS via Twilio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS via Twilio": {
+      "main": [
+        [
+          {
+            "node": "Mark SMS as Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Email as Processed": {
+      "main": [
+        [
+          {
+            "node": "Merge & Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark SMS as Processed": {
+      "main": [
+        [
+          {
+            "node": "Merge & Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge & Summary": {
+      "main": [
+        [
+          {
+            "node": "Log Daily Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "e2c544c5-fd7c-43de-a508-4c8f9627fc8e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c4da5820d3cd1d1e41516312fdb5337ab5a9d175024d82851d2bc655f82fc72d"
+  },
+  "id": "JwO72GKSS2EuFleAc00E7",
+  "tags": []
+}

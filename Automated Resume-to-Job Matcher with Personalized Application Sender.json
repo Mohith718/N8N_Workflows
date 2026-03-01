@@ -1,0 +1,580 @@
+{
+  "name": "Automated Resume-to-Job Matcher with Personalized Application Sender",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "1Y6hS6m4H4_kIqL6k3Dz1ETKHz2glSmE5",
+          "mode": "list",
+          "cachedResultName": "demo",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1Y6hS6m4H4_kIqL6k3Dz1ETKHz2glSmE5"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "id": "c0b025f5-cc1c-4e42-ae49-0240e5df07e1",
+      "name": "Resume Upload Trigger",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        6064,
+        896
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "nGLMd3W3TTvuCxhe",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "candidateName",
+              "value": "={{ $json.lastModifyingUser.displayName }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "candidateEmail",
+              "value": "={{ $json.lastModifyingUser.emailAddress }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "interestedDomain",
+              "value": "Data Analyst",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "c305d516-aeb7-49b6-accc-faed2725f2e9",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        6288,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "616d8a9a-5abd-4fa4-93a1-635cbfecdc24",
+      "name": "Extract Resume Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        6736,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a resume parsing assistant. Extract structured information from the provided resume text.\n\nYour task is to:\n1. Identify candidate name, email, phone, and location\n2. Extract work experience with company names, roles, and durations\n3. List education details including degrees and institutions\n4. Extract all technical and soft skills\n5. Identify certifications and achievements\n\nReturn the data in the structured JSON format defined by the output parser."
+        }
+      },
+      "id": "66e7b3a1-04db-4fbd-84c9-9fa28de0a581",
+      "name": "Parse Resume Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        6960,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n\t\"type\": \"object\",\n\t\"properties\": {\n\t\t\"name\": {\n\t\t\t\"type\": \"string\",\n\t\t\t\"description\": \"Candidate full name\"\n\t\t},\n\t\t\"email\": {\n\t\t\t\"type\": \"string\",\n\t\t\t\"description\": \"Candidate email address\"\n\t\t},\n\t\t\"phone\": {\n\t\t\t\"type\": \"string\",\n\t\t\t\"description\": \"Candidate phone number\"\n\t\t},\n\t\t\"skills\": {\n\t\t\t\"type\": \"array\",\n\t\t\t\"description\": \"List of candidate skills\",\n\t\t\t\"items\": {\n\t\t\t\t\"type\": \"string\"\n\t\t\t}\n\t\t},\n\t\t\"experience\": {\n\t\t\t\"type\": \"array\",\n\t\t\t\"description\": \"Work experience entries\",\n\t\t\t\"items\": {\n\t\t\t\t\"type\": \"object\"\n\t\t\t}\n\t\t},\n\t\t\"education\": {\n\t\t\t\"type\": \"array\",\n\t\t\t\"description\": \"Education history\",\n\t\t\t\"items\": {\n\t\t\t\t\"type\": \"object\"\n\t\t\t}\n\t\t}\n\t}\n}"
+      },
+      "id": "3255dddc-1ce9-41a1-97d2-0633a13f779f",
+      "name": "Resume Structure Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        7104,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Resume Data: {{ $('Parse Resume Agent').first().json }}\n\nJob Posting: {{ $json.jobTitle }} at {{ $json.company }}\nDescription: {{ $json.description }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a job matching assistant. Analyze how well a candidate's resume matches a job description.\n\nYour task is to:\n1. Compare candidate skills with required job skills\n2. Evaluate experience relevance\n3. Assess education fit\n4. Consider location and other factors\n5. Calculate a match score from 0-100\n6. Provide brief reasoning for the score\n\nReturn the result in the structured JSON format with matchScore (number) and reasoning (string)."
+        }
+      },
+      "id": "05ae3e7b-caba-46f3-a24a-4a9cbfdb5022",
+      "name": "Match Score Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        7536,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n\t\"matchScore\": 85,\n\t\"reasoning\": \"Strong alignment between candidate skills and job requirements\"\n}"
+      },
+      "id": "376b551f-7698-4015-a762-eca24cdd00aa",
+      "name": "Match Score Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        7680,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "sortFieldsUi": {
+          "sortField": [
+            {
+              "fieldName": "output.matchScore",
+              "order": "descending"
+            }
+          ]
+        },
+        "options": {
+          "disableDotNotation": false
+        }
+      },
+      "id": "e1f9a7bf-2daa-4eb2-b13f-3c751ef6369d",
+      "name": "Sort by Match Score",
+      "type": "n8n-nodes-base.sort",
+      "typeVersion": 1,
+      "position": [
+        7888,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "maxItems": 10
+      },
+      "id": "c0e06dc0-ad93-4f55-b568-e372d67ec424",
+      "name": "Top 10 Jobs",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        8112,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Candidate Name: {{ $('Workflow Configuration').first().json.candidateName }}\nJob Title: {{ $json.jobTitle }}\nCompany: {{ $json.company }}\nJob Description: {{ $json.description }}\nCandidate Skills: {{ $('Parse Resume Agent').first().json.skills }}\nCandidate Experience: {{ $('Parse Resume Agent').first().json.experience }}",
+        "options": {
+          "systemMessage": "You are a professional cover letter writer. Create personalized, compelling cover letters for job applications.\n\nYour task is to:\n1. Address the specific job and company\n2. Highlight relevant candidate skills and experience\n3. Show enthusiasm for the role\n4. Keep it concise (3-4 paragraphs)\n5. Use professional tone\n6. Include a strong opening and closing\n\nReturn ONLY the cover letter text, ready to be sent in an email."
+        }
+      },
+      "id": "c9c1e974-c43b-4366-9a97-e7f78e74d3ef",
+      "name": "Cover Letter Generator",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        8336,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Parse Resume Agent').item.json.output.email }}",
+        "subject": "=Application for {{ $('Generate Job Listings').item.json.jobTitle }} - {{ $('Workflow Configuration').first().json.candidateName }}",
+        "message": "={{ $('Cover Letter Generator').first().json.output }}",
+        "options": {
+          "appendAttribution": false,
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {}
+            ]
+          },
+          "senderName": "={{ $('Workflow Configuration').first().json.candidateName }}"
+        }
+      },
+      "id": "9f00f107-0b6c-46f2-bd5b-ef0dd1f97e06",
+      "name": "Send Application Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        9136,
+        896
+      ],
+      "webhookId": "c0ee6450-f910-4c6c-95f5-672beea949fb",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "1jQHTxdrXnQdOfho",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "1TdPxsilbrKgPq39IGv-LHfdd5lQ2_zyq",
+          "mode": "list",
+          "cachedResultName": "Somaraju Mohith Srinivas Resume.pdf",
+          "cachedResultUrl": "https://drive.google.com/file/d/1TdPxsilbrKgPq39IGv-LHfdd5lQ2_zyq/view?usp=drivesdk"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        6512,
+        896
+      ],
+      "id": "aa15724d-d0f7-4dcc-a8e1-5a521765cf51",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "nGLMd3W3TTvuCxhe",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-4o-mini",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        6976,
+        1120
+      ],
+      "id": "6776ec01-0341-406d-a49c-63d2411ebe29",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "zeC3xiEng3QihdUo",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate sample job listings based on candidate's profile\nconst interestedDomain = $('Workflow Configuration').first().json.interestedDomain;\nconst candidateSkills = $('Parse Resume Agent').first().json.output.skills || [];\n\n// Sample companies and locations\nconst companies = [\n  'Google', 'Microsoft', 'Amazon', 'Meta', 'Apple', 'Netflix', 'Salesforce',\n  'IBM', 'Oracle', 'Adobe', 'Uber', 'Airbnb', 'LinkedIn', 'Twitter', 'Spotify',\n  'Stripe', 'Shopify', 'Zoom', 'Slack', 'Dropbox'\n];\n\nconst locations = [\n  'San Francisco, CA', 'New York, NY', 'Seattle, WA', 'Austin, TX',\n  'Boston, MA', 'Chicago, IL', 'Los Angeles, CA', 'Denver, CO',\n  'Atlanta, GA', 'Remote', 'Hybrid - Bay Area', 'Remote (US)'\n];\n\n// Generate job listings\nconst jobListings = [];\nconst numJobs = 18;\n\nfor (let i = 0; i < numJobs; i++) {\n  const company = companies[i % companies.length];\n  const location = locations[i % locations.length];\n  \n  // Select 3-5 relevant skills for this job\n  const numSkills = Math.min(3 + Math.floor(Math.random() * 3), candidateSkills.length);\n  const jobSkills = [];\n  const usedIndices = new Set();\n  \n  while (jobSkills.length < numSkills && usedIndices.size < candidateSkills.length) {\n    const idx = Math.floor(Math.random() * candidateSkills.length);\n    if (!usedIndices.has(idx)) {\n      usedIndices.add(idx);\n      jobSkills.push(candidateSkills[idx]);\n    }\n  }\n  \n  const skillsList = jobSkills.join(', ');\n  \n  // Generate job description\n  const description = `We are seeking a talented ${interestedDomain} to join our team at ${company}. \n\nKey Responsibilities:\n- Analyze complex datasets to drive business decisions\n- Create insightful visualizations and reports\n- Collaborate with cross-functional teams\n- Develop data models and analytical frameworks\n\nRequired Skills:\n${jobSkills.map(skill => `- ${skill}`).join('\\n')}\n\nWe offer competitive compensation, excellent benefits, and opportunities for growth.`;\n  \n  // Generate job title variations\n  const titleVariations = [\n    `${interestedDomain}`,\n    `Senior ${interestedDomain}`,\n    `${interestedDomain} - ${company}`,\n    `Junior ${interestedDomain}`,\n    `${interestedDomain} Specialist`\n  ];\n  \n  const jobTitle = titleVariations[i % titleVariations.length];\n  \n  jobListings.push({\n    jobTitle: jobTitle,\n    company: company,\n    location: location,\n    description: description,\n    applyUrl: `https://careers.${company.toLowerCase().replace(/\\s+/g, '')}.com/jobs/${i + 1000}`,\n    hrEmail: `hr.recruiting@${company.toLowerCase().replace(/\\s+/g, '')}.com`\n  });\n}\n\n// Return the job listings\nreturn jobListings.map(job => ({ json: job }));"
+      },
+      "id": "6f1e393d-63b6-451d-a6df-3afc55af6fb4",
+      "name": "Generate Job Listings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7312,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-4o-mini",
+        "options": {}
+      },
+      "id": "d4d6009f-636a-4381-a4d3-3d1859a1a7ab",
+      "name": "OpenRouter Model - Matcher",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        7552,
+        1120
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "zeC3xiEng3QihdUo",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-4o-mini",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        8336,
+        1120
+      ],
+      "id": "88a526db-ab98-4f21-92a4-a75c1b8beef6",
+      "name": "OpenRouter Chat Model1",
+      "credentials": {
+        "openRouterApi": {
+          "id": "zeC3xiEng3QihdUo",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d59b2614-bf43-4915-8496-db82ef5f4e1e",
+              "name": "output",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            },
+            {
+              "id": "599b8993-be56-4c78-84c4-1f96473ca597",
+              "name": "data",
+              "value": "={{ $items(\"Download file\")[0].binary.data }}",
+              "type": "binary"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        8688,
+        896
+      ],
+      "id": "e70551ad-a351-4c4b-abdd-2797789ed1ad",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "keep": "lastItems"
+      },
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        8912,
+        896
+      ],
+      "id": "66f0386e-3317-4c62-8e93-70113ae848dd",
+      "name": "Limit"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Resume Upload Trigger": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Resume Text": {
+      "main": [
+        [
+          {
+            "node": "Parse Resume Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume Structure Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Parse Resume Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Resume Agent": {
+      "main": [
+        [
+          {
+            "node": "Generate Job Listings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Score Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Match Score Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Score Agent": {
+      "main": [
+        [
+          {
+            "node": "Sort by Match Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort by Match Score": {
+      "main": [
+        [
+          {
+            "node": "Top 10 Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Top 10 Jobs": {
+      "main": [
+        [
+          {
+            "node": "Cover Letter Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cover Letter Generator": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract Resume Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Parse Resume Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Job Listings": {
+      "main": [
+        [
+          {
+            "node": "Match Score Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Model - Matcher": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Match Score Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Cover Letter Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "Send Application Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9160bcc8-3f34-45cb-8b05-0677e77c6a79",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "78a413ee20a5904c789f7d0a64df9a0e6dbc4db0d076ad6e47dd9f6c20987bc0"
+  },
+  "id": "wNX5ByisihwnOZwK",
+  "tags": []
+}

@@ -1,0 +1,482 @@
+{
+  "name": "LinkedIn Profile",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/customsearch/v1",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "AIzaSyD_RHShcFHxyMe1HjU9ESX4ivyEetKObE4"
+            },
+            {
+              "name": "cx",
+              "value": "44356374f6fd64224"
+            },
+            {
+              "name": "q",
+              "value": "CEO automotive United States site:linkedin.com/in"
+            },
+            {
+              "name": "start",
+              "value": "={{ $json.index }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        0
+      ],
+      "id": "8e59fa31-245c-4072-8bf9-fb93833e1451",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "339d5bc9-4d89-449e-90e6-ec329cebaa23",
+              "name": "index",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "be3dd48e-56fa-42f8-b349-f2461ff2bfea",
+              "name": "maxpages",
+              "value": 10,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "fbd2d40e-3a91-47c3-a473-1a6eb75ea383",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        160,
+        0
+      ],
+      "id": "8e4896b4-3039-448f-9ee8-4744915c27da",
+      "name": "When chat message received",
+      "webhookId": "00fb3273-571f-406e-a45c-b8032fc3bb5d"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get input JSON (Google Custom Search API response)\nconst input = $input.all()[0].json;\n\n// Safely get search results\nconst results = input.items || [];\n\n// If no results found, return false\nif (!results.length) {\n  return [{ json: { success: false } }];\n}\n\n// Read the next start index (if exists) from Google Custom Search JSON\nconst nextIndex = input.queries?.nextPage?.[0]?.startIndex || 0;\n\n// Transform data into desired format\nconst output = results.map((item, index) => {\n  const titleParts = item.title ? item.title.split(' - ') : [];\n  const name = titleParts[0] || '';\n  const url = item.link || '';\n  const description = item.snippet || '';\n\n  // Set result true for all except last item\n  const result = (index === results.length - 1) ? false : true;\n\n  return {\n    json: {\n      name,\n      url,\n      description,\n      result,\n      index: nextIndex // all items get same index = next start index (e.g. 11)\n    }\n  };\n});\n\n// Return formatted output\nreturn output;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        0
+      ],
+      "id": "192ea767-a2c9-4cd7-b0e1-c1c09cb99f53",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1056,
+        0
+      ],
+      "id": "af24b180-fca3-4e23-a19d-b121d5e4e98d",
+      "name": "Wait",
+      "webhookId": "0b1c1539-b4a0-4402-8d8f-8534578a95c5"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1BFJEeIEIET-a4aGmdd1AQt7QEwCUMhfyvh4urft-bV8",
+          "mode": "list",
+          "cachedResultName": "profiles",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BFJEeIEIET-a4aGmdd1AQt7QEwCUMhfyvh4urft-bV8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BFJEeIEIET-a4aGmdd1AQt7QEwCUMhfyvh4urft-bV8/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $json.name }}",
+            "Link": "={{ $json.url }}",
+            "Description": "={{ $json.description }}",
+            "Index": "={{ $json.index }}",
+            "Result": "={{ $json.result }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Link",
+              "displayName": "Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Description",
+              "displayName": "Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Index",
+              "displayName": "Index",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Result",
+              "displayName": "Result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "78038ceb-7be1-4e6e-863e-a96af4baec21",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "0hRXCLW59qIbUDtP",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4b39c2dd-a2d8-4d10-8b7e-9048017cb800",
+              "leftValue": "={{ $json.result }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "a2af6ceb-a28a-42fa-9e32-f83f177aa1c3",
+              "leftValue": "={{ $json.Index }}",
+              "rightValue": 11,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1664,
+        0
+      ],
+      "id": "76465f38-2697-4aaa-a03a-837d32a334e1",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}{{ $('When chat message received').item.json.chatInput }}",
+        "options": {
+          "systemMessage": "when user says hi you need respond by showing message profiles are added in the sheet"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        800,
+        208
+      ],
+      "id": "aff9c410-261d-463b-93c6-677f0ce1ffb1",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        352
+      ],
+      "id": "1bdc2015-8447-475c-a78a-78bc18ff08e1",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "bsdjZcDDTvYlF3in",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8f3fb1db-6d36-4212-823e-9a818bafea28",
+              "name": "Index",
+              "value": "={{ $json.Index }}",
+              "type": "number"
+            },
+            {
+              "id": "34572ef8-2229-4c6c-acd8-9eb55917c4ad",
+              "name": "Result",
+              "value": "={{ $json.Result }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1456,
+        0
+      ],
+      "id": "5c74d808-75d3-4d75-8d99-67c312fc4492",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b056cc83-97ff-4dbd-bf3c-57a217100fd8",
+              "name": "respond added",
+              "value": "LinkedIn URLs added to the sheet",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1856,
+        32
+      ],
+      "id": "dc808125-6411-4cde-804c-4b28f49a6ad5",
+      "name": "Edit Fields2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        []
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ad861c5f-8510-46df-a449-e66445757638",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5aed6b2bc9e7adf5bcb3ab78e1b103a65214a7ea2cacddc8010df86b2bde4524"
+  },
+  "id": "WPHwQ2CukPogYqGE",
+  "tags": []
+}
