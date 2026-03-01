@@ -1,0 +1,51 @@
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+.env.production
+
+# API keys and credentials
+*credentials*
+*secret*
+*api_key*
+*apikey*
+*.pem
+*.key
+
+# Configuration files with sensitive data
+config.json
+config.local.json
+settings.json
+settings.local.json
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Node modules (if using Node.js)
+node_modules/
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# n8n specific
+.n8n/
+n8n.db
+
+# Backup files
+*.bak
+*.backup
